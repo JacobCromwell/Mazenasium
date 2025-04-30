@@ -13,13 +13,12 @@ import (
 
 	"github.com/JacobCromwell/Mazenasium/internal/game/npc"
 	"github.com/JacobCromwell/Mazenasium/internal/game/trivia"
+	"github.com/JacobCromwell/Mazenasium/internal/game/maze"
 )
 
 const (
 	screenWidth  = 800
 	screenHeight = 600
-	mazeRadius   = 120 // Radius of the circular maze
-	tileSize     = 40  // Size of each tile in the maze
 	playerSize   = 38  // Player size (2 pixels smaller than tile)
 )
 
@@ -30,7 +29,7 @@ type Game struct {
 	currentTurn TurnOwner
 	player      Player
 	npcManager  *npc.Manager
-	maze        Maze
+	maze        *maze.Maze  // Now refers to maze.Maze type from our package
 	triviaMgr   *trivia.Manager
 	actionMsg   string
 	actionTimer int
@@ -65,15 +64,6 @@ const (
 	NPCTurn
 )
 
-// TileType represents different types of tiles in the maze
-type TileType int
-
-const (
-	Floor TileType = iota
-	Wall
-	Goal
-)
-
 // Player represents the player character
 type Player struct {
 	gridX, gridY int
@@ -81,24 +71,6 @@ type Player struct {
 	destX, destY float64 // Destination for smooth movement
 	moving       bool
 	size         float64
-}
-
-// Maze represents the maze grid
-type Maze struct {
-	grid          [][]MazeTile
-	width, height int
-	centerX       float64
-	centerY       float64
-	rotationAngle float64
-	goalX, goalY  int // Track goal position
-}
-
-// MazeTile represents a single tile in the maze
-type MazeTile struct {
-	tileType TileType
-	visited  bool
-	hasItem  bool
-	itemType int
 }
 
 // Initialize new game
@@ -116,65 +88,28 @@ func NewGame() *Game {
 			size:  playerSize,
 		},
 		npcManager: npc.NewManager(),
-		maze: Maze{
-			width:         mazeWidth,
-			height:        mazeHeight,
-			centerX:       screenWidth - mazeRadius - 20,
-			centerY:       screenHeight - mazeRadius - 20,
-			rotationAngle: 0,
-			goalX:         mazeWidth - 2,  // Goal near the bottom-right corner
-			goalY:         mazeHeight - 2,
-		},
-		triviaMgr:   trivia.NewManager(),
-		actionMsg:   "",
+		maze:       maze.New(mazeWidth, mazeHeight, screenWidth-maze.Radius-20, screenHeight-maze.Radius-20),
+		triviaMgr:  trivia.NewManager(),
+		actionMsg:  "",
 		actionTimer: 0,
-		winner:      "",
+		winner:     "",
 	}
 
-	// Generate maze grid
-	game.maze.grid = createMazeGrid(mazeWidth, mazeHeight, game.maze.goalX, game.maze.goalY)
-
 	// Set initial position for player
-	game.player.x = float64(game.player.gridX) * tileSize
-	game.player.y = float64(game.player.gridY) * tileSize
+	game.player.x = float64(game.player.gridX) * maze.TileSize
+	game.player.y = float64(game.player.gridY) * maze.TileSize
 	game.player.destX = game.player.x 
 	game.player.destY = game.player.y
 
 	// Create NPCs
-	npc1 := npc.New(0, 3, 3, tileSize, color.RGBA{255, 0, 0, 255})
-	npc2 := npc.New(1, 5, 5, tileSize, color.RGBA{0, 255, 0, 255})
+	npc1 := npc.New(0, 3, 3, maze.TileSize, color.RGBA{255, 0, 0, 255})
+	npc2 := npc.New(1, 5, 5, maze.TileSize, color.RGBA{0, 255, 0, 255})
 	
 	// Add NPCs to manager
 	game.npcManager.AddNPC(npc1)
 	game.npcManager.AddNPC(npc2)
 
 	return game
-}
-
-// Create a simple maze grid with a goal
-func createMazeGrid(width, height, goalX, goalY int) [][]MazeTile {
-	grid := make([][]MazeTile, height)
-	for y := range grid {
-		grid[y] = make([]MazeTile, width)
-		for x := range grid[y] {
-			// Create walls around the edges and some random walls
-			if x == 0 || y == 0 || x == width-1 || y == height-1 || (rand.Intn(100) < 20 && x > 1 && y > 1) {
-				grid[y][x].tileType = Wall
-			} else {
-				grid[y][x].tileType = Floor
-			}
-		}
-	}
-
-	// Ensure the starting positions are not walls
-	grid[1][1].tileType = Floor // Player start
-	grid[3][3].tileType = Floor // NPC1 start
-	grid[5][5].tileType = Floor // NPC2 start
-
-	// Add the goal tile
-	grid[goalY][goalX].tileType = Goal
-
-	return grid
 }
 
 // Update game state
@@ -252,10 +187,10 @@ func (g *Game) updatePlaying() {
 	// Maze rotation (can be done anytime during player's turn)
 	if g.currentTurn == PlayerTurn {
 		if ebiten.IsKeyPressed(ebiten.KeyQ) {
-			g.maze.rotationAngle -= 0.05
+			g.maze.RotateLeft()
 		}
 		if ebiten.IsKeyPressed(ebiten.KeyE) {
-			g.maze.rotationAngle += 0.05
+			g.maze.RotateRight()
 		}
 	}
 }
@@ -275,7 +210,7 @@ func (g *Game) updatePositions() {
 			g.player.moving = false
 
 			// Check if player reached the goal
-			if g.maze.grid[g.player.gridY][g.player.gridX].tileType == Goal {
+			if g.maze.IsGoal(g.player.gridX, g.player.gridY) {
 				g.winner = "Player"
 				g.gameState = GameOver
 				return
@@ -304,7 +239,7 @@ func (g *Game) updatePositions() {
 	
 	// Check if any NPCs reached the goal
 	for _, arrivedNPC := range arrivedNPCs {
-		if g.maze.grid[arrivedNPC.GridY][arrivedNPC.GridX].tileType == Goal {
+		if g.maze.IsGoal(arrivedNPC.GridX, arrivedNPC.GridY) {
 			g.winner = fmt.Sprintf("NPC %d", arrivedNPC.ID+1)
 			g.gameState = GameOver
 			return
@@ -333,16 +268,14 @@ func (g *Game) handlePlayerMovement() {
 	}
 
 	// Check if movement is valid (not a wall and within bounds)
-	if newGridX >= 0 && newGridX < g.maze.width &&
-		newGridY >= 0 && newGridY < g.maze.height &&
-		g.maze.grid[newGridY][newGridX].tileType != Wall {
+	if g.maze.IsValidMove(newGridX, newGridY) {
 		// Update grid position
 		g.player.gridX = newGridX
 		g.player.gridY = newGridY
 
 		// Set destination for smooth movement
-		g.player.destX = float64(newGridX) * tileSize
-		g.player.destY = float64(newGridY) * tileSize
+		g.player.destX = float64(newGridX) * maze.TileSize
+		g.player.destY = float64(newGridY) * maze.TileSize
 		g.player.moving = true
 	}
 }
@@ -358,9 +291,7 @@ func (g *Game) processNPCTurn() {
 
 	// Process one NPC's turn using a callback to check valid moves
 	validMoveFn := func(x, y int) bool {
-		return x >= 0 && x < g.maze.width &&
-			y >= 0 && y < g.maze.height &&
-			g.maze.grid[y][x].tileType != Wall
+		return g.maze.IsValidMove(x, y)
 	}
 	
 	g.npcManager.ProcessTurn(validMoveFn)
@@ -409,7 +340,7 @@ func (g *Game) drawGameOver(screen *ebiten.Image) {
 // Draw the playing state
 func (g *Game) drawPlaying(screen *ebiten.Image) {
 	// Draw the maze grid
-	g.drawMaze(screen)
+	g.maze.Draw(screen)
 
 	// Draw NPCs
 	for _, npc := range g.npcManager.NPCs {
@@ -420,7 +351,7 @@ func (g *Game) drawPlaying(screen *ebiten.Image) {
 	ebitenutil.DrawRect(screen, g.player.x+1, g.player.y+1, g.player.size, g.player.size, color.RGBA{0, 0, 255, 255})
 
 	// Draw circular maze in the corner
-	g.drawCircularMaze(screen)
+	g.maze.DrawCircular(screen, g.player.gridX, g.player.gridY)
 
 	// Draw UI info
 	g.drawUI(screen)
@@ -429,76 +360,6 @@ func (g *Game) drawPlaying(screen *ebiten.Image) {
 	if g.actionMsg != "" {
 		ebitenutil.DebugPrintAt(screen, g.actionMsg, screenWidth/2-50, screenHeight/2)
 	}
-}
-
-// Draw the maze grid
-func (g *Game) drawMaze(screen *ebiten.Image) {
-	// Draw grid lines and tiles
-	for y := 0; y < g.maze.height; y++ {
-		for x := 0; x < g.maze.width; x++ {
-			// Calculate tile position
-			tileX := float64(x) * tileSize
-			tileY := float64(y) * tileSize
-
-			// Draw tile border
-			borderColor := color.RGBA{100, 100, 100, 255}
-			ebitenutil.DrawLine(screen, tileX, tileY, tileX+tileSize, tileY, borderColor)
-			ebitenutil.DrawLine(screen, tileX, tileY, tileX, tileY+tileSize, borderColor)
-			ebitenutil.DrawLine(screen, tileX+tileSize, tileY, tileX+tileSize, tileY+tileSize, borderColor)
-			ebitenutil.DrawLine(screen, tileX, tileY+tileSize, tileX+tileSize, tileY+tileSize, borderColor)
-
-			// Draw different tile types
-			switch g.maze.grid[y][x].tileType {
-			case Wall:
-				ebitenutil.DrawRect(screen, tileX, tileY, tileSize, tileSize, color.RGBA{70, 70, 70, 255})
-			case Goal:
-				ebitenutil.DrawRect(screen, tileX, tileY, tileSize, tileSize, color.RGBA{200, 0, 200, 255}) // Purple goal
-			default: // Floor
-				ebitenutil.DrawRect(screen, tileX, tileY, tileSize, tileSize, color.RGBA{200, 200, 200, 100})
-			}
-		}
-	}
-}
-
-// Draw the circular maze in the corner
-func (g *Game) drawCircularMaze(screen *ebiten.Image) {
-	// Draw outer circle
-	ebitenutil.DrawCircle(screen, g.maze.centerX, g.maze.centerY, mazeRadius, color.RGBA{200, 200, 200, 100})
-
-	// Draw a simplified representation of the maze in the circle
-	// This is just a placeholder - in a real game, you'd want to create a proper radial maze
-	cellAngle := 2 * math.Pi / float64(g.maze.width)
-	cellRadius := mazeRadius / float64(g.maze.height)
-
-	for y := 0; y < g.maze.height; y++ {
-		radius := float64(y+1) * cellRadius
-
-		for x := 0; x < g.maze.width; x++ {
-			angle := g.maze.rotationAngle + float64(x)*cellAngle
-
-			// Calculate position
-			cellX := g.maze.centerX + math.Cos(angle)*radius
-			cellY := g.maze.centerY + math.Sin(angle)*radius
-
-			// Draw different cell types
-			switch g.maze.grid[y][x].tileType {
-			case Wall:
-				ebitenutil.DrawCircle(screen, cellX, cellY, cellRadius/2, color.RGBA{70, 70, 70, 255})
-			case Goal:
-				ebitenutil.DrawCircle(screen, cellX, cellY, cellRadius/2, color.RGBA{200, 0, 200, 255}) // Purple goal
-			}
-		}
-	}
-
-	// Draw player position in the minimap
-	playerAngle := g.maze.rotationAngle + float64(g.player.gridX)*cellAngle
-	playerRadius := float64(g.player.gridY+1) * cellRadius
-	playerMiniX := g.maze.centerX + math.Cos(playerAngle)*playerRadius
-	playerMiniY := g.maze.centerY + math.Sin(playerAngle)*playerRadius
-	ebitenutil.DrawCircle(screen, playerMiniX, playerMiniY, cellRadius/2, color.RGBA{0, 0, 255, 255})
-
-	// Draw rotation controls
-	ebitenutil.DebugPrintAt(screen, "Q/E: Rotate", int(g.maze.centerX)-40, int(g.maze.centerY)+mazeRadius+10)
 }
 
 // Draw the UI
@@ -540,7 +401,7 @@ func (g *Game) drawTrivia(screen *ebiten.Image) {
 
 	// Draw options
 	for i, option := range currentQuestion.Options {
-		optionYpadding := 10 * i
+		optionYpadding := 30 * i
 		ebitenutil.DebugPrintAt(screen, fmt.Sprintf("%d: %s", i+1, option), 70, (140 + optionYpadding))
 	}
 
