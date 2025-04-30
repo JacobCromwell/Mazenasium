@@ -33,6 +33,7 @@ type Game struct {
 	triviaMgr   *trivia.Manager
 	actionMsg   string
 	actionTimer int
+	winner      string // Added to track who wins the game
 }
 
 // GameState represents the current state of the game
@@ -63,6 +64,15 @@ const (
 	NPCTurn
 )
 
+// TileType represents different types of tiles in the maze
+type TileType int
+
+const (
+	Floor TileType = iota
+	Wall
+	Goal
+)
+
 // Player represents the player character
 type Player struct {
 	gridX, gridY int
@@ -81,6 +91,7 @@ type NPC struct {
 	moving       bool
 	size         float64
 	color        color.RGBA
+	hasMoved     bool    // Added to track if NPC has moved in current turn
 }
 
 // Maze represents the maze grid
@@ -90,11 +101,12 @@ type Maze struct {
 	centerX       float64
 	centerY       float64
 	rotationAngle float64
+	goalX, goalY  int // Added to track goal position
 }
 
 // MazeTile represents a single tile in the maze
 type MazeTile struct {
-	isWall   bool
+	tileType TileType
 	visited  bool
 	hasItem  bool
 	itemType int
@@ -116,18 +128,20 @@ func NewGame() *Game {
 		},
 		npcs: []NPC{
 			{
-				id:    0,
-				gridX: 3,
-				gridY: 3,
-				size:  playerSize,
-				color: color.RGBA{255, 0, 0, 255},
+				id:       0,
+				gridX:    3,
+				gridY:    3,
+				size:     playerSize,
+				color:    color.RGBA{255, 0, 0, 255},
+				hasMoved: false,
 			},
 			{
-				id:    1,
-				gridX: 5,
-				gridY: 5,
-				size:  playerSize,
-				color: color.RGBA{0, 255, 0, 255},
+				id:       1,
+				gridX:    5,
+				gridY:    5,
+				size:     playerSize,
+				color:    color.RGBA{0, 255, 0, 255},
+				hasMoved: false,
 			},
 		},
 		maze: Maze{
@@ -136,14 +150,17 @@ func NewGame() *Game {
 			centerX:       screenWidth - mazeRadius - 20,
 			centerY:       screenHeight - mazeRadius - 20,
 			rotationAngle: 0,
+			goalX:         mazeWidth - 2,  // Goal near the bottom-right corner
+			goalY:         mazeHeight - 2,
 		},
 		triviaMgr:   trivia.NewManager(),
 		actionMsg:   "",
 		actionTimer: 0,
+		winner:      "",
 	}
 
 	// Generate maze grid
-	game.maze.grid = createMazeGrid(mazeWidth, mazeHeight)
+	game.maze.grid = createMazeGrid(mazeWidth, mazeHeight, game.maze.goalX, game.maze.goalY)
 
 	// Set initial positions for player and NPCs
 	game.player.x = float64(game.player.gridX) * tileSize
@@ -161,23 +178,28 @@ func NewGame() *Game {
 	return game
 }
 
-// Create a simple maze grid
-func createMazeGrid(width, height int) [][]MazeTile {
+// Create a simple maze grid with a goal
+func createMazeGrid(width, height, goalX, goalY int) [][]MazeTile {
 	grid := make([][]MazeTile, height)
 	for y := range grid {
 		grid[y] = make([]MazeTile, width)
 		for x := range grid[y] {
 			// Create walls around the edges and some random walls
 			if x == 0 || y == 0 || x == width-1 || y == height-1 || (rand.Intn(100) < 20 && x > 1 && y > 1) {
-				grid[y][x].isWall = true
+				grid[y][x].tileType = Wall
+			} else {
+				grid[y][x].tileType = Floor
 			}
 		}
 	}
 
 	// Ensure the starting positions are not walls
-	grid[1][1].isWall = false // Player start
-	grid[3][3].isWall = false // NPC1 start
-	grid[5][5].isWall = false // NPC2 start
+	grid[1][1].tileType = Floor // Player start
+	grid[3][3].tileType = Floor // NPC1 start
+	grid[5][5].tileType = Floor // NPC2 start
+
+	// Add the goal tile
+	grid[goalY][goalX].tileType = Goal
 
 	return grid
 }
@@ -239,6 +261,11 @@ func (g *Game) updatePlaying() {
 			if g.currentTurn == PlayerTurn {
 				g.currentTurn = NPCTurn
 				g.turnState = ProcessingNPCTurn
+				
+				// Reset NPC movement tracking for the new turn
+				for i := range g.npcs {
+					g.npcs[i].hasMoved = false
+				}
 			} else {
 				g.currentTurn = PlayerTurn
 				g.turnState = WaitingForMove
@@ -277,6 +304,13 @@ func (g *Game) updatePositions() {
 			g.player.y = g.player.destY
 			g.player.moving = false
 
+			// Check if player reached the goal
+			if g.maze.grid[g.player.gridY][g.player.gridX].tileType == Goal {
+				g.winner = "Player"
+				g.gameState = GameOver
+				return
+			}
+
 			// If this was a player move, show trivia
 			if g.currentTurn == PlayerTurn && g.turnState == WaitingForMove {
 				g.gameState = AnsweringTrivia
@@ -307,6 +341,13 @@ func (g *Game) updatePositions() {
 				g.npcs[i].x = g.npcs[i].destX
 				g.npcs[i].y = g.npcs[i].destY
 				g.npcs[i].moving = false
+				
+				// Check if NPC reached the goal
+				if g.maze.grid[g.npcs[i].gridY][g.npcs[i].gridX].tileType == Goal {
+					g.winner = fmt.Sprintf("NPC %d", g.npcs[i].id+1)
+					g.gameState = GameOver
+					return
+				}
 			} else {
 				// Move toward destination
 				if dx != 0 {
@@ -343,7 +384,7 @@ func (g *Game) handlePlayerMovement() {
 	// Check if movement is valid (not a wall and within bounds)
 	if newGridX >= 0 && newGridX < g.maze.width &&
 		newGridY >= 0 && newGridY < g.maze.height &&
-		!g.maze.grid[newGridY][newGridX].isWall {
+		g.maze.grid[newGridY][newGridX].tileType != Wall {
 		// Update grid position
 		g.player.gridX = newGridX
 		g.player.gridY = newGridY
@@ -361,10 +402,26 @@ func (g *Game) processNPCTurn() {
 		return // Wait for movement to complete
 	}
 
-	// Process all NPCs
+	// Check if all NPCs have moved this turn
+	allMoved := true
 	for i := range g.npcs {
-		if g.npcs[i].moving {
-			continue // Skip if already moving
+		if !g.npcs[i].hasMoved {
+			allMoved = false
+			break
+		}
+	}
+
+	// If all NPCs have moved, end the NPC turn
+	if allMoved {
+		g.currentTurn = PlayerTurn
+		g.turnState = WaitingForMove
+		return
+	}
+
+	// Process NPCs that haven't moved yet
+	for i := range g.npcs {
+		if g.npcs[i].hasMoved || g.npcs[i].moving {
+			continue // Skip if already moved this turn or currently moving
 		}
 
 		// Simple NPC movement - move in a random valid direction
@@ -385,7 +442,7 @@ func (g *Game) processNPCTurn() {
 			// Check if movement is valid
 			if newGridX >= 0 && newGridX < g.maze.width &&
 				newGridY >= 0 && newGridY < g.maze.height &&
-				!g.maze.grid[newGridY][newGridX].isWall {
+				g.maze.grid[newGridY][newGridX].tileType != Wall {
 				// Update grid position
 				g.npcs[i].gridX = newGridX
 				g.npcs[i].gridY = newGridY
@@ -394,21 +451,18 @@ func (g *Game) processNPCTurn() {
 				g.npcs[i].destX = float64(newGridX) * tileSize
 				g.npcs[i].destY = float64(newGridY) * tileSize
 				g.npcs[i].moving = true
+				g.npcs[i].hasMoved = true
 				moved = true
-				break
+				
+				// Only move one NPC at a time
+				return
 			}
 		}
 
 		if !moved {
-			// If NPC can't move, just skip its turn
-			continue
+			// If NPC can't move, mark as moved anyway to prevent getting stuck
+			g.npcs[i].hasMoved = true
 		}
-	}
-
-	// After processing all NPCs, return to player's turn
-	if !g.anyNPCMoving() {
-		g.currentTurn = PlayerTurn
-		g.turnState = WaitingForMove
 	}
 }
 
@@ -447,8 +501,19 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	case AnsweringTrivia:
 		g.drawTrivia(screen)
 	case GameOver:
-		ebitenutil.DebugPrint(screen, "Game Over! Press SPACE to restart")
+		g.drawGameOver(screen)
 	}
+}
+
+// Draw the game over screen
+func (g *Game) drawGameOver(screen *ebiten.Image) {
+	// Draw message background
+	ebitenutil.DrawRect(screen, 100, 200, screenWidth-200, 100, color.RGBA{50, 50, 80, 240})
+	
+	// Draw winner message
+	winMessage := fmt.Sprintf("%s reached the goal first and won!", g.winner)
+	ebitenutil.DebugPrintAt(screen, winMessage, screenWidth/2-120, screenHeight/2-10)
+	ebitenutil.DebugPrintAt(screen, "Press SPACE to restart", screenWidth/2-100, screenHeight/2+20)
 }
 
 // Draw the playing state
@@ -492,10 +557,13 @@ func (g *Game) drawMaze(screen *ebiten.Image) {
 			ebitenutil.DrawLine(screen, tileX+tileSize, tileY, tileX+tileSize, tileY+tileSize, borderColor)
 			ebitenutil.DrawLine(screen, tileX, tileY+tileSize, tileX+tileSize, tileY+tileSize, borderColor)
 
-			// Draw wall or floor
-			if g.maze.grid[y][x].isWall {
+			// Draw different tile types
+			switch g.maze.grid[y][x].tileType {
+			case Wall:
 				ebitenutil.DrawRect(screen, tileX, tileY, tileSize, tileSize, color.RGBA{70, 70, 70, 255})
-			} else {
+			case Goal:
+				ebitenutil.DrawRect(screen, tileX, tileY, tileSize, tileSize, color.RGBA{200, 0, 200, 255}) // Purple goal
+			default: // Floor
 				ebitenutil.DrawRect(screen, tileX, tileY, tileSize, tileSize, color.RGBA{200, 200, 200, 100})
 			}
 		}
@@ -518,13 +586,16 @@ func (g *Game) drawCircularMaze(screen *ebiten.Image) {
 		for x := 0; x < g.maze.width; x++ {
 			angle := g.maze.rotationAngle + float64(x)*cellAngle
 
-			// Calculate position
+			// Calculate position the same way before
 			cellX := g.maze.centerX + math.Cos(angle)*radius
 			cellY := g.maze.centerY + math.Sin(angle)*radius
 
-			// Draw cell
-			if g.maze.grid[y][x].isWall {
+			// Draw different cell types
+			switch g.maze.grid[y][x].tileType {
+			case Wall:
 				ebitenutil.DrawCircle(screen, cellX, cellY, cellRadius/2, color.RGBA{70, 70, 70, 255})
+			case Goal:
+				ebitenutil.DrawCircle(screen, cellX, cellY, cellRadius/2, color.RGBA{200, 0, 200, 255}) // Purple goal
 			}
 		}
 	}
@@ -562,6 +633,9 @@ func (g *Game) drawUI(screen *ebiten.Image) {
 		stateText = "NPCs are moving..."
 	}
 	ebitenutil.DebugPrintAt(screen, stateText, 10, 30)
+
+	// Draw goal info
+	ebitenutil.DebugPrintAt(screen, "Reach the purple goal to win!", 10, 50)
 }
 
 // Draw the trivia screen
