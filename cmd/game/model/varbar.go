@@ -2,6 +2,6 @@ package model
 
 import "fmt"
 
-func whatever() {
+func Whatever() {
     fmt.Println("Hello, World!")
 }
