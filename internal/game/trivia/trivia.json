@@ -1,0 +1,31 @@
+{
+    "Name": "Science Trivia",
+    "Category": "Science",
+    "Questions": [
+      {
+        "Text": "Which of these elements has the highest atomic number?",
+        "Options": ["Gold", "Uranium", "Lead", "Silver"],
+        "Answer": 1
+      },
+      {
+        "Text": "What is the chemical symbol for silver?",
+        "Options": ["Si", "Sv", "Ag", "Sr"],
+        "Answer": 2
+      },
+      {
+        "Text": "Which of these is NOT a type of elementary particle?",
+        "Options": ["Quark", "Lepton", "Meson", "Photino"],
+        "Answer": 3
+      },
+      {
+        "Text": "What is the approximate speed of light in a vacuum?",
+        "Options": ["300,000 km/s", "150,000 km/s", "1,000,000 km/s", "50,000 km/s"],
+        "Answer": 0
+      },
+      {
+        "Text": "Which of these scientists developed the theory of general relativity?",
+        "Options": ["Isaac Newton", "Albert Einstein", "Stephen Hawking", "Niels Bohr"],
+        "Answer": 1
+      }
+    ]
+  }
