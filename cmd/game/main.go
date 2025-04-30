@@ -11,7 +11,7 @@ import (
 	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
 	"github.com/hajimehoshi/ebiten/v2/inpututil"
 
-	"github.com/JacobCromwell/mazenasium/cmd/game/model/varbar.go"
+	"github.com/JacobCromwell/Mazenasium/internal/game/trivia"
 )
 
 const (
@@ -30,7 +30,7 @@ type Game struct {
 	player      Player
 	npcs        []NPC
 	maze        Maze
-	triviaMgr   TriviaManager
+	triviaMgr   *trivia.Manager
 	actionMsg   string
 	actionTimer int
 }
@@ -100,21 +100,6 @@ type MazeTile struct {
 	itemType int
 }
 
-// TriviaManager handles trivia questions and answers
-type TriviaManager struct {
-	questions    []TriviaQuestion
-	currentIndex int
-	answered     bool
-	correct      bool
-}
-
-// TriviaQuestion represents a single trivia question
-type TriviaQuestion struct {
-	question string
-	options  []string
-	answer   int
-}
-
 // Initialize new game
 func NewGame() *Game {
 	mazeWidth := 10
@@ -152,11 +137,7 @@ func NewGame() *Game {
 			centerY:       screenHeight - mazeRadius - 20,
 			rotationAngle: 0,
 		},
-		triviaMgr: TriviaManager{
-			questions:    loadTriviaQuestions(),
-			currentIndex: 0,
-			answered:     false,
-		},
+		triviaMgr:   trivia.NewManager(),
 		actionMsg:   "",
 		actionTimer: 0,
 	}
@@ -199,38 +180,6 @@ func createMazeGrid(width, height int) [][]MazeTile {
 	grid[5][5].isWall = false // NPC2 start
 
 	return grid
-}
-
-// Load trivia questions
-func loadTriviaQuestions() []TriviaQuestion {
-	// In a real implementation, you'd load these from a file
-	return []TriviaQuestion{
-		{
-			question: "What is the capital of France?",
-			options:  []string{"London", "Berlin", "Paris", "Madrid"},
-			answer:   2, // Paris (0-indexed)
-		},
-		{
-			question: "Which planet is known as the Red Planet?",
-			options:  []string{"Venus", "Mars", "Jupiter", "Saturn"},
-			answer:   1, // Mars
-		},
-		{
-			question: "What is the largest mammal?",
-			options:  []string{"Elephant", "Giraffe", "Blue Whale", "Hippopotamus"},
-			answer:   2, // Blue Whale
-		},
-		{
-			question: "What element has the chemical symbol 'O'?",
-			options:  []string{"Gold", "Oxygen", "Osmium", "Oganesson"},
-			answer:   1, // Oxygen
-		},
-		{
-			question: "Who wrote 'Romeo and Juliet'?",
-			options:  []string{"Charles Dickens", "William Shakespeare", "Jane Austen", "Mark Twain"},
-			answer:   1, // Shakespeare
-		},
-	}
 }
 
 // Update game state
@@ -332,8 +281,8 @@ func (g *Game) updatePositions() {
 			if g.currentTurn == PlayerTurn && g.turnState == WaitingForMove {
 				g.gameState = AnsweringTrivia
 				g.turnState = WaitingForTrivia
-				g.triviaMgr.answered = false
-				g.triviaMgr.currentIndex = rand.Intn(len(g.triviaMgr.questions))
+				g.triviaMgr.Answered = false
+				g.triviaMgr.SetRandomQuestion(rand.Intn)
 			}
 		} else {
 			// Move toward destination
@@ -475,22 +424,15 @@ func (g *Game) anyNPCMoving() bool {
 
 // Update trivia state
 func (g *Game) updateTrivia() {
-	question := g.triviaMgr.questions[g.triviaMgr.currentIndex]
-
-	// Check for answer selection
-	for i := 0; i < len(question.options); i++ {
-		if inpututil.IsKeyJustPressed(ebiten.Key1 + ebiten.Key(i)) {
-			g.triviaMgr.answered = true
-			g.triviaMgr.correct = (i == question.answer)
-
-			// Return to game after brief delay
-			go func() {
-				// Note: In a real game, you'd want to use a more robust timer or state system
-				// This is just a simple demonstration
-				g.gameState = Playing
-				g.turnState = WaitingForAction
-			}()
-		}
+	// Use the trivia package's HandleInput method
+	if g.triviaMgr.HandleInput() {
+		// Return to game after brief delay
+		go func() {
+			// Note: In a real game, you'd want to use a more robust timer or state system
+			// This is just a simple demonstration
+			g.gameState = Playing
+			g.turnState = WaitingForAction
+		}()
 	}
 }
 
@@ -624,16 +566,16 @@ func (g *Game) drawUI(screen *ebiten.Image) {
 
 // Draw the trivia screen
 func (g *Game) drawTrivia(screen *ebiten.Image) {
-	question := g.triviaMgr.questions[g.triviaMgr.currentIndex]
+	currentQuestion := g.triviaMgr.GetCurrentQuestion()
 
 	// Draw question background
 	ebitenutil.DrawRect(screen, 50, 50, screenWidth-100, screenHeight-100, color.RGBA{50, 50, 80, 240})
 
 	// Draw question
-	ebitenutil.DebugPrintAt(screen, question.question, 70, 70)
+	ebitenutil.DebugPrintAt(screen, currentQuestion.Question, 70, 70)
 
 	// Draw options
-	for i, option := range question.options {
+	for i, option := range currentQuestion.Options {
 		optionYpadding := 10 * i
 		ebitenutil.DebugPrintAt(screen, fmt.Sprintf("%d: %s", i+1, option), 70, (140 + optionYpadding))
 	}
@@ -642,11 +584,11 @@ func (g *Game) drawTrivia(screen *ebiten.Image) {
 	ebitenutil.DebugPrintAt(screen, "Press 1-4 to answer", 70, screenHeight-100)
 
 	// If answered, show result
-	if g.triviaMgr.answered {
+	if g.triviaMgr.Answered {
 		resultText := "Incorrect!"
 		//resultColor := color.RGBA{255, 0, 0, 255}
 
-		if g.triviaMgr.correct {
+		if g.triviaMgr.Correct {
 			resultText = "Correct!"
 			//resultColor = color.RGBA{0, 255, 0, 255}
 		}
