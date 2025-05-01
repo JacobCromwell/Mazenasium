@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"image/color"
 	"log"
-	"math"
 	"math/rand"
 
 	"github.com/hajimehoshi/ebiten/v2"
@@ -14,12 +13,12 @@ import (
 	"github.com/JacobCromwell/Mazenasium/internal/game/npc"
 	"github.com/JacobCromwell/Mazenasium/internal/game/trivia"
 	"github.com/JacobCromwell/Mazenasium/internal/game/maze"
+	"github.com/JacobCromwell/Mazenasium/internal/game/player"
 )
 
 const (
 	screenWidth  = 800
 	screenHeight = 600
-	playerSize   = 38  // Player size (2 pixels smaller than tile)
 )
 
 // Game implements ebiten.Game interface.
@@ -27,9 +26,9 @@ type Game struct {
 	gameState   GameState
 	turnState   TurnState
 	currentTurn TurnOwner
-	player      Player
+	player      *player.Player
 	npcManager  *npc.Manager
-	maze        *maze.Maze  // Now refers to maze.Maze type from our package
+	maze        *maze.Maze
 	triviaMgr   *trivia.Manager
 	actionMsg   string
 	actionTimer int
@@ -64,15 +63,6 @@ const (
 	NPCTurn
 )
 
-// Player represents the player character
-type Player struct {
-	gridX, gridY int
-	x, y         float64 // Actual position for smooth movement
-	destX, destY float64 // Destination for smooth movement
-	moving       bool
-	size         float64
-}
-
 // Initialize new game
 func NewGame() *Game {
 	mazeWidth := 10
@@ -82,24 +72,14 @@ func NewGame() *Game {
 		gameState:   Playing,
 		turnState:   WaitingForMove,
 		currentTurn: PlayerTurn,
-		player: Player{
-			gridX: 1,
-			gridY: 1,
-			size:  playerSize,
-		},
-		npcManager: npc.NewManager(),
-		maze:       maze.New(mazeWidth, mazeHeight, screenWidth-maze.Radius-20, screenHeight-maze.Radius-20),
-		triviaMgr:  trivia.NewManager(),
-		actionMsg:  "",
+		player:      player.New(1, 1, maze.TileSize),
+		npcManager:  npc.NewManager(),
+		maze:        maze.New(mazeWidth, mazeHeight, screenWidth-maze.Radius-20, screenHeight-maze.Radius-20),
+		triviaMgr:   trivia.NewManager(),
+		actionMsg:   "",
 		actionTimer: 0,
-		winner:     "",
+		winner:      "",
 	}
-
-	// Set initial position for player
-	game.player.x = float64(game.player.gridX) * maze.TileSize
-	game.player.y = float64(game.player.gridY) * maze.TileSize
-	game.player.destX = game.player.x 
-	game.player.destY = game.player.y
 
 	// Create NPCs
 	npc1 := npc.New(0, 3, 3, maze.TileSize, color.RGBA{255, 0, 0, 255})
@@ -198,39 +178,23 @@ func (g *Game) updatePlaying() {
 // Update positions for smooth movement
 func (g *Game) updatePositions() {
 	// Update player position with smooth movement
-	if g.player.moving {
-		moveSpeed := 5.0
-		dx := g.player.destX - g.player.x
-		dy := g.player.destY - g.player.y
+	playerGridX, playerGridY := g.player.GetGridPosition()
+	
+	// Update player, and check if they've arrived at destination
+	if arrived := g.player.Update(5.0); arrived {
+		// Check if player reached the goal
+		if g.maze.IsGoal(playerGridX, playerGridY) {
+			g.winner = "Player"
+			g.gameState = GameOver
+			return
+		}
 
-		if math.Abs(dx) < moveSpeed && math.Abs(dy) < moveSpeed {
-			// Arrived at destination
-			g.player.x = g.player.destX
-			g.player.y = g.player.destY
-			g.player.moving = false
-
-			// Check if player reached the goal
-			if g.maze.IsGoal(g.player.gridX, g.player.gridY) {
-				g.winner = "Player"
-				g.gameState = GameOver
-				return
-			}
-
-			// If this was a player move, show trivia
-			if g.currentTurn == PlayerTurn && g.turnState == WaitingForMove {
-				g.gameState = AnsweringTrivia
-				g.turnState = WaitingForTrivia
-				g.triviaMgr.Answered = false
-				g.triviaMgr.SetRandomQuestion(rand.Intn)
-			}
-		} else {
-			// Move toward destination
-			if dx != 0 {
-				g.player.x += math.Copysign(moveSpeed, dx)
-			}
-			if dy != 0 {
-				g.player.y += math.Copysign(moveSpeed, dy)
-			}
+		// If this was a player move, show trivia
+		if g.currentTurn == PlayerTurn && g.turnState == WaitingForMove {
+			g.gameState = AnsweringTrivia
+			g.turnState = WaitingForTrivia
+			g.triviaMgr.Answered = false
+			g.triviaMgr.SetRandomQuestion(rand.Intn)
 		}
 	}
 
@@ -249,11 +213,12 @@ func (g *Game) updatePositions() {
 
 // Handle player movement
 func (g *Game) handlePlayerMovement() {
-	if g.player.moving {
+	if g.player.IsMoving() {
 		return // Already moving
 	}
 
-	newGridX, newGridY := g.player.gridX, g.player.gridY
+	playerGridX, playerGridY := g.player.GetGridPosition()
+	newGridX, newGridY := playerGridX, playerGridY
 
 	if inpututil.IsKeyJustPressed(ebiten.KeyUp) {
 		newGridY--
@@ -269,14 +234,8 @@ func (g *Game) handlePlayerMovement() {
 
 	// Check if movement is valid (not a wall and within bounds)
 	if g.maze.IsValidMove(newGridX, newGridY) {
-		// Update grid position
-		g.player.gridX = newGridX
-		g.player.gridY = newGridY
-
 		// Set destination for smooth movement
-		g.player.destX = float64(newGridX) * maze.TileSize
-		g.player.destY = float64(newGridY) * maze.TileSize
-		g.player.moving = true
+		g.player.SetDestination(newGridX, newGridY, maze.TileSize)
 	}
 }
 
@@ -348,10 +307,12 @@ func (g *Game) drawPlaying(screen *ebiten.Image) {
 	}
 
 	// Draw player
-	ebitenutil.DrawRect(screen, g.player.x+1, g.player.y+1, g.player.size, g.player.size, color.RGBA{0, 0, 255, 255})
+	playerX, playerY := g.player.GetPosition()
+	ebitenutil.DrawRect(screen, playerX+1, playerY+1, g.player.Size, g.player.Size, color.RGBA{0, 0, 255, 255})
 
 	// Draw circular maze in the corner
-	g.maze.DrawCircular(screen, g.player.gridX, g.player.gridY)
+	playerGridX, playerGridY := g.player.GetGridPosition()
+	g.maze.DrawCircular(screen, playerGridX, playerGridY)
 
 	// Draw UI info
 	g.drawUI(screen)
