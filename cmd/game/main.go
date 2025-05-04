@@ -10,10 +10,11 @@ import (
 	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
 	"github.com/hajimehoshi/ebiten/v2/inpututil"
 
-	"github.com/JacobCromwell/Mazenasium/internal/game/npc"
-	"github.com/JacobCromwell/Mazenasium/internal/game/trivia"
 	"github.com/JacobCromwell/Mazenasium/internal/game/maze"
+	"github.com/JacobCromwell/Mazenasium/internal/game/npc"
 	"github.com/JacobCromwell/Mazenasium/internal/game/player"
+	"github.com/JacobCromwell/Mazenasium/internal/game/trivia"
+	"github.com/JacobCromwell/Mazenasium/internal/game/turn" // New import
 )
 
 const (
@@ -24,8 +25,7 @@ const (
 // Game implements ebiten.Game interface.
 type Game struct {
 	gameState   GameState
-	turnState   TurnState
-	currentTurn TurnOwner
+	turnManager *turn.Manager // Changed from individual turn states
 	player      *player.Player
 	npcManager  *npc.Manager
 	maze        *maze.Maze
@@ -44,25 +44,6 @@ const (
 	GameOver
 )
 
-// TurnState represents the current state within a turn
-type TurnState int
-
-const (
-	WaitingForMove TurnState = iota
-	WaitingForTrivia
-	WaitingForAction
-	WaitingForEndTurn
-	ProcessingNPCTurn
-)
-
-// TurnOwner represents who currently has a turn
-type TurnOwner int
-
-const (
-	PlayerTurn TurnOwner = iota
-	NPCTurn
-)
-
 // Initialize new game
 func NewGame() *Game {
 	mazeWidth := 10
@@ -70,8 +51,7 @@ func NewGame() *Game {
 
 	game := &Game{
 		gameState:   Playing,
-		turnState:   WaitingForMove,
-		currentTurn: PlayerTurn,
+		turnManager: turn.NewManager(), // Initialize turn manager
 		player:      player.New(1, 1, maze.TileSize),
 		npcManager:  npc.NewManager(),
 		maze:        maze.New(mazeWidth, mazeHeight, screenWidth-maze.Radius-20, screenHeight-maze.Radius-20),
@@ -123,41 +103,37 @@ func (g *Game) updatePlaying() {
 	g.updatePositions()
 
 	// Process based on turn state
-	switch g.turnState {
-	case WaitingForMove:
-		if g.currentTurn == PlayerTurn {
+	switch g.turnManager.CurrentState {
+	case turn.WaitingForMove:
+		if g.turnManager.IsPlayerTurn() {
 			g.handlePlayerMovement()
 		} else {
 			g.processNPCTurn()
 		}
 
-	case WaitingForAction:
+	case turn.WaitingForAction:
 		if inpututil.IsKeyJustPressed(ebiten.KeyA) {
 			g.actionMsg = "Action used!"
 			g.actionTimer = 60 // Show message for 60 frames
-			g.turnState = WaitingForEndTurn
+			g.turnManager.NextState(turn.WaitingForEndTurn)
 		}
 
 		// Allow skipping the action
 		if inpututil.IsKeyJustPressed(ebiten.KeyTab) {
-			g.turnState = WaitingForEndTurn
+			g.turnManager.NextState(turn.WaitingForEndTurn)
 		}
 
-	case WaitingForEndTurn:
+	case turn.WaitingForEndTurn:
 		if inpututil.IsKeyJustPressed(ebiten.KeySpace) {
 			// End turn and switch to next actor
-			if g.currentTurn == PlayerTurn {
-				g.currentTurn = NPCTurn
-				g.turnState = ProcessingNPCTurn
-				// Reset NPC movement tracking for the new turn
+			g.turnManager.EndTurn()
+			// Reset NPC movement tracking for the new turn if switching to NPC turn
+			if g.turnManager.CurrentOwner == turn.NPCTurn {
 				g.npcManager.ResetMovedStatus()
-			} else {
-				g.currentTurn = PlayerTurn
-				g.turnState = WaitingForMove
 			}
 		}
 
-	case ProcessingNPCTurn:
+	case turn.ProcessingNPCTurn:
 		// If no NPCs are still moving, process their next action
 		if !g.npcManager.AnyMoving() {
 			g.processNPCTurn()
@@ -165,7 +141,7 @@ func (g *Game) updatePlaying() {
 	}
 
 	// Maze rotation (can be done anytime during player's turn)
-	if g.currentTurn == PlayerTurn {
+	if g.turnManager.IsPlayerTurn() {
 		if ebiten.IsKeyPressed(ebiten.KeyQ) {
 			g.maze.RotateLeft()
 		}
@@ -190,9 +166,9 @@ func (g *Game) updatePositions() {
 		}
 
 		// If this was a player move, show trivia
-		if g.currentTurn == PlayerTurn && g.turnState == WaitingForMove {
+		if g.turnManager.IsPlayerTurn() && g.turnManager.CurrentState == turn.WaitingForMove {
 			g.gameState = AnsweringTrivia
-			g.turnState = WaitingForTrivia
+			g.turnManager.NextState(turn.WaitingForTrivia)
 			g.triviaMgr.Answered = false
 			g.triviaMgr.SetRandomQuestion(rand.Intn)
 		}
@@ -243,8 +219,7 @@ func (g *Game) handlePlayerMovement() {
 func (g *Game) processNPCTurn() {
 	// Check if all NPCs have moved
 	if g.npcManager.AllMoved() {
-		g.currentTurn = PlayerTurn
-		g.turnState = WaitingForMove
+		g.turnManager.EndTurn() // Switch back to player's turn
 		return
 	}
 
@@ -265,7 +240,7 @@ func (g *Game) updateTrivia() {
 			// Note: In a real game, you'd want to use a more robust timer or state system
 			// This is just a simple demonstration
 			g.gameState = Playing
-			g.turnState = WaitingForAction
+			g.turnManager.NextState(turn.WaitingForAction)
 		}()
 	}
 }
@@ -325,26 +300,11 @@ func (g *Game) drawPlaying(screen *ebiten.Image) {
 
 // Draw the UI
 func (g *Game) drawUI(screen *ebiten.Image) {
-	// Draw turn info
-	turnText := "Player's Turn"
-	if g.currentTurn == NPCTurn {
-		turnText = "NPC's Turn"
-	}
-	ebitenutil.DebugPrintAt(screen, turnText, 10, 10)
+	// Draw turn info using the turn manager
+	ebitenutil.DebugPrintAt(screen, g.turnManager.OwnerText(), 10, 10)
 
-	// Draw turn state info
-	stateText := ""
-	switch g.turnState {
-	case WaitingForMove:
-		stateText = "Arrow Keys: Move"
-	case WaitingForAction:
-		stateText = "A: Use Action, Tab: Skip"
-	case WaitingForEndTurn:
-		stateText = "Space: End Turn"
-	case ProcessingNPCTurn:
-		stateText = "NPCs are moving..."
-	}
-	ebitenutil.DebugPrintAt(screen, stateText, 10, 30)
+	// Draw turn state info using the turn manager
+	ebitenutil.DebugPrintAt(screen, g.turnManager.StateText(), 10, 30)
 
 	// Draw goal info
 	ebitenutil.DebugPrintAt(screen, "Reach the purple goal to win!", 10, 50)
