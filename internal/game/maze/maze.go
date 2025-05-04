@@ -27,9 +27,8 @@ const (
 type Maze struct {
 	grid          [][]MazeTile
 	width, height int
-	centerX       float64
-	centerY       float64
-	rotationAngle float64
+	centerX       int
+	centerY       int
 	goalX, goalY  int // Track goal position
 }
 
@@ -42,7 +41,7 @@ type MazeTile struct {
 }
 
 // New creates a new maze with the specified dimensions
-func New(width, height int, centerX, centerY float64) *Maze {
+func New(width, height int, centerX int, centerY int) *Maze {
 	goalX := width - 2  // Goal near the bottom-right corner
 	goalY := height - 2
 
@@ -51,7 +50,6 @@ func New(width, height int, centerX, centerY float64) *Maze {
 		height:        height,
 		centerX:       centerX,
 		centerY:       centerY,
-		rotationAngle: 0,
 		goalX:         goalX,
 		goalY:         goalY,
 		grid:          createMazeGrid(width, height, goalX, goalY),
