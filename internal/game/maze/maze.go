@@ -1,7 +1,6 @@
 package maze
 
 import (
-	"math"
 	"math/rand"
 
 	"github.com/hajimehoshi/ebiten/v2"
@@ -112,56 +111,6 @@ func (m *Maze) Draw(screen *ebiten.Image) {
 			}
 		}
 	}
-}
-
-// DrawCircular draws the circular maze in the corner
-func (m *Maze) DrawCircular(screen *ebiten.Image, playerGridX, playerGridY int) {
-	// Draw outer circle
-	ebitenutil.DrawCircle(screen, m.centerX, m.centerY, Radius, color.RGBA{200, 200, 200, 100})
-
-	// Draw a simplified representation of the maze in the circle
-	cellAngle := 2 * math.Pi / float64(m.width)
-	cellRadius := Radius / float64(m.height)
-
-	for y := 0; y < m.height; y++ {
-		radius := float64(y+1) * cellRadius
-
-		for x := 0; x < m.width; x++ {
-			angle := m.rotationAngle + float64(x)*cellAngle
-
-			// Calculate position
-			cellX := m.centerX + math.Cos(angle)*radius
-			cellY := m.centerY + math.Sin(angle)*radius
-
-			// Draw different cell types
-			switch m.grid[y][x].tileType {
-			case Wall:
-				ebitenutil.DrawCircle(screen, cellX, cellY, cellRadius/2, color.RGBA{70, 70, 70, 255})
-			case Goal:
-				ebitenutil.DrawCircle(screen, cellX, cellY, cellRadius/2, color.RGBA{200, 0, 200, 255}) // Purple goal
-			}
-		}
-	}
-
-	// Draw player position in the minimap
-	playerAngle := m.rotationAngle + float64(playerGridX)*cellAngle
-	playerRadius := float64(playerGridY+1) * cellRadius
-	playerMiniX := m.centerX + math.Cos(playerAngle)*playerRadius
-	playerMiniY := m.centerY + math.Sin(playerAngle)*playerRadius
-	ebitenutil.DrawCircle(screen, playerMiniX, playerMiniY, cellRadius/2, color.RGBA{0, 0, 255, 255})
-
-	// Draw rotation controls
-	ebitenutil.DebugPrintAt(screen, "Q/E: Rotate", int(m.centerX)-40, int(m.centerY)+Radius+10)
-}
-
-// RotateLeft rotates the maze left
-func (m *Maze) RotateLeft() {
-	m.rotationAngle -= 0.05
-}
-
-// RotateRight rotates the maze right
-func (m *Maze) RotateRight() {
-	m.rotationAngle += 0.05
 }
 
 // IsWall checks if the given coordinates are a wall

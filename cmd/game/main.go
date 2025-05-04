@@ -7,32 +7,26 @@ import (
 	"math/rand"
 
 	"github.com/hajimehoshi/ebiten/v2"
-	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
-	"github.com/hajimehoshi/ebiten/v2/inpututil"
 
 	"github.com/JacobCromwell/Mazenasium/internal/game/maze"
 	"github.com/JacobCromwell/Mazenasium/internal/game/npc"
 	"github.com/JacobCromwell/Mazenasium/internal/game/player"
 	"github.com/JacobCromwell/Mazenasium/internal/game/trivia"
-	"github.com/JacobCromwell/Mazenasium/internal/game/turn" // New import
-)
-
-const (
-	screenWidth  = 800
-	screenHeight = 600
+	"github.com/JacobCromwell/Mazenasium/internal/game/turn"
+	"github.com/JacobCromwell/Mazenasium/internal/game/ui"
 )
 
 // Game implements ebiten.Game interface.
 type Game struct {
-	gameState   GameState
-	turnManager *turn.Manager // Changed from individual turn states
-	player      *player.Player
-	npcManager  *npc.Manager
-	maze        *maze.Maze
-	triviaMgr   *trivia.Manager
-	actionMsg   string
-	actionTimer int
-	winner      string // Track who wins the game
+	gameState    GameState
+	turnManager  *turn.Manager
+	player       *player.Player
+	npcManager   *npc.Manager
+	maze         *maze.Maze
+	triviaMgr    *trivia.Manager
+	uiRenderer   *ui.Renderer   // UI renderer
+	inputHandler *ui.InputHandler // Input handler
+	winner       string       // Track who wins the game
 }
 
 // GameState represents the current state of the game
@@ -50,15 +44,15 @@ func NewGame() *Game {
 	mazeHeight := 10
 
 	game := &Game{
-		gameState:   Playing,
-		turnManager: turn.NewManager(), // Initialize turn manager
-		player:      player.New(1, 1, maze.TileSize),
-		npcManager:  npc.NewManager(),
-		maze:        maze.New(mazeWidth, mazeHeight, screenWidth-maze.Radius-20, screenHeight-maze.Radius-20),
-		triviaMgr:   trivia.NewManager(),
-		actionMsg:   "",
-		actionTimer: 0,
-		winner:      "",
+		gameState:    Playing,
+		turnManager:  turn.NewManager(),
+		player:       player.New(1, 1, maze.TileSize),
+		npcManager:   npc.NewManager(),
+		maze:         maze.New(mazeWidth, mazeHeight, ui.ScreenWidth-maze.Radius-20, ui.ScreenHeight-maze.Radius-20),
+		triviaMgr:    trivia.NewManager(),
+		uiRenderer:   ui.NewRenderer(),     // Initialize UI renderer
+		inputHandler: ui.NewInputHandler(), // Initialize input handler
+		winner:       "",
 	}
 
 	// Create NPCs
@@ -80,19 +74,14 @@ func (g *Game) Update() error {
 	case AnsweringTrivia:
 		g.updateTrivia()
 	case GameOver:
-		if inpututil.IsKeyJustPressed(ebiten.KeySpace) {
+		if g.inputHandler.CheckRestartKey() {
 			// Reset game
 			*g = *NewGame()
 		}
 	}
 
-	// Update action message timer
-	if g.actionTimer > 0 {
-		g.actionTimer--
-		if g.actionTimer == 0 {
-			g.actionMsg = ""
-		}
-	}
+	// Update action message timer in the UI renderer
+	g.uiRenderer.UpdateActionTimer()
 
 	return nil
 }
@@ -112,19 +101,18 @@ func (g *Game) updatePlaying() {
 		}
 
 	case turn.WaitingForAction:
-		if inpututil.IsKeyJustPressed(ebiten.KeyA) {
-			g.actionMsg = "Action used!"
-			g.actionTimer = 60 // Show message for 60 frames
+		if g.inputHandler.CheckActionKey() {
+			g.uiRenderer.SetActionMessage("Action used!", 60) // Use UI renderer to set message
 			g.turnManager.NextState(turn.WaitingForEndTurn)
 		}
 
 		// Allow skipping the action
-		if inpututil.IsKeyJustPressed(ebiten.KeyTab) {
+		if g.inputHandler.CheckSkipActionKey() {
 			g.turnManager.NextState(turn.WaitingForEndTurn)
 		}
 
 	case turn.WaitingForEndTurn:
-		if inpututil.IsKeyJustPressed(ebiten.KeySpace) {
+		if g.inputHandler.CheckEndTurnKey() {
 			// End turn and switch to next actor
 			g.turnManager.EndTurn()
 			// Reset NPC movement tracking for the new turn if switching to NPC turn
@@ -137,16 +125,6 @@ func (g *Game) updatePlaying() {
 		// If no NPCs are still moving, process their next action
 		if !g.npcManager.AnyMoving() {
 			g.processNPCTurn()
-		}
-	}
-
-	// Maze rotation (can be done anytime during player's turn)
-	if g.turnManager.IsPlayerTurn() {
-		if ebiten.IsKeyPressed(ebiten.KeyQ) {
-			g.maze.RotateLeft()
-		}
-		if ebiten.IsKeyPressed(ebiten.KeyE) {
-			g.maze.RotateRight()
 		}
 	}
 }
@@ -194,19 +172,13 @@ func (g *Game) handlePlayerMovement() {
 	}
 
 	playerGridX, playerGridY := g.player.GetGridPosition()
-	newGridX, newGridY := playerGridX, playerGridY
-
-	if inpututil.IsKeyJustPressed(ebiten.KeyUp) {
-		newGridY--
-	} else if inpututil.IsKeyJustPressed(ebiten.KeyDown) {
-		newGridY++
-	} else if inpututil.IsKeyJustPressed(ebiten.KeyLeft) {
-		newGridX--
-	} else if inpututil.IsKeyJustPressed(ebiten.KeyRight) {
-		newGridX++
-	} else {
-		return // No movement key pressed
+	dx, dy := g.inputHandler.CheckPlayerMovement()
+	
+	if dx == 0 && dy == 0 {
+		return // No movement input
 	}
+	
+	newGridX, newGridY := playerGridX + dx, playerGridY + dy
 
 	// Check if movement is valid (not a wall and within bounds)
 	if g.maze.IsValidMove(newGridX, newGridY) {
@@ -233,8 +205,15 @@ func (g *Game) processNPCTurn() {
 
 // Update trivia state
 func (g *Game) updateTrivia() {
-	// Use the trivia package's HandleInput method
-	if g.triviaMgr.HandleInput() {
+	// Get input from the input handler
+	answer := g.inputHandler.CheckTriviaInput()
+	
+	if answer > 0 {
+		// Process the answer
+		correct := g.triviaMgr.CheckAnswer(answer - 1) // Convert from 1-based to 0-based
+		g.triviaMgr.Answered = true
+		g.triviaMgr.Correct = correct
+		
 		// Return to game after brief delay
 		go func() {
 			// Note: In a real game, you'd want to use a more robust timer or state system
@@ -245,111 +224,27 @@ func (g *Game) updateTrivia() {
 	}
 }
 
-// Draw the game
+// Draw the game - delegates to UI renderer
 func (g *Game) Draw(screen *ebiten.Image) {
-	// Draw background
-	screen.Fill(color.RGBA{40, 45, 55, 255})
-
-	switch g.gameState {
-	case Playing:
-		g.drawPlaying(screen)
-	case AnsweringTrivia:
-		g.drawTrivia(screen)
-	case GameOver:
-		g.drawGameOver(screen)
-	}
-}
-
-// Draw the game over screen
-func (g *Game) drawGameOver(screen *ebiten.Image) {
-	// Draw message background
-	ebitenutil.DrawRect(screen, 100, 200, screenWidth-200, 100, color.RGBA{50, 50, 80, 240})
-	
-	// Draw winner message
-	winMessage := fmt.Sprintf("%s reached the goal first and won!", g.winner)
-	ebitenutil.DebugPrintAt(screen, winMessage, screenWidth/2-120, screenHeight/2-10)
-	ebitenutil.DebugPrintAt(screen, "Press SPACE to restart", screenWidth/2-100, screenHeight/2+20)
-}
-
-// Draw the playing state
-func (g *Game) drawPlaying(screen *ebiten.Image) {
-	// Draw the maze grid
-	g.maze.Draw(screen)
-
-	// Draw NPCs
-	for _, npc := range g.npcManager.NPCs {
-		ebitenutil.DrawRect(screen, npc.X+1, npc.Y+1, npc.Size, npc.Size, npc.Color)
-	}
-
-	// Draw player
-	playerX, playerY := g.player.GetPosition()
-	ebitenutil.DrawRect(screen, playerX+1, playerY+1, g.player.Size, g.player.Size, color.RGBA{0, 0, 255, 255})
-
-	// Draw circular maze in the corner
-	playerGridX, playerGridY := g.player.GetGridPosition()
-	g.maze.DrawCircular(screen, playerGridX, playerGridY)
-
-	// Draw UI info
-	g.drawUI(screen)
-
-	// Draw action message if active
-	if g.actionMsg != "" {
-		ebitenutil.DebugPrintAt(screen, g.actionMsg, screenWidth/2-50, screenHeight/2)
-	}
-}
-
-// Draw the UI
-func (g *Game) drawUI(screen *ebiten.Image) {
-	// Draw turn info using the turn manager
-	ebitenutil.DebugPrintAt(screen, g.turnManager.OwnerText(), 10, 10)
-
-	// Draw turn state info using the turn manager
-	ebitenutil.DebugPrintAt(screen, g.turnManager.StateText(), 10, 30)
-
-	// Draw goal info
-	ebitenutil.DebugPrintAt(screen, "Reach the purple goal to win!", 10, 50)
-}
-
-// Draw the trivia screen
-func (g *Game) drawTrivia(screen *ebiten.Image) {
-	currentQuestion := g.triviaMgr.GetCurrentQuestion()
-
-	// Draw question background
-	ebitenutil.DrawRect(screen, 50, 50, screenWidth-100, screenHeight-100, color.RGBA{50, 50, 80, 240})
-
-	// Draw question
-	ebitenutil.DebugPrintAt(screen, currentQuestion.Question, 70, 70)
-
-	// Draw options
-	for i, option := range currentQuestion.Options {
-		optionYpadding := 30 * i
-		ebitenutil.DebugPrintAt(screen, fmt.Sprintf("%d: %s", i+1, option), 70, (140 + optionYpadding))
-	}
-
-	// Draw instructions
-	ebitenutil.DebugPrintAt(screen, "Press 1-4 to answer", 70, screenHeight-100)
-
-	// If answered, show result
-	if g.triviaMgr.Answered {
-		resultText := "Incorrect!"
-		//resultColor := color.RGBA{255, 0, 0, 255}
-
-		if g.triviaMgr.Correct {
-			resultText = "Correct!"
-			//resultColor = color.RGBA{0, 255, 0, 255}
-		}
-
-		ebitenutil.DebugPrintAt(screen, resultText, screenWidth/2-40, screenHeight/2)
-	}
+	g.uiRenderer.Draw(
+		screen,
+		int(g.gameState),
+		g.maze,
+		g.player,
+		g.npcManager,
+		g.turnManager,
+		g.triviaMgr,
+		g.winner,
+	)
 }
 
 // Layout implements ebiten.Game's Layout
 func (g *Game) Layout(outsideWidth, outsideHeight int) (int, int) {
-	return screenWidth, screenHeight
+	return ui.ScreenWidth, ui.ScreenHeight
 }
 
 func main() {
-	ebiten.SetWindowSize(screenWidth, screenHeight)
+	ebiten.SetWindowSize(ui.ScreenWidth, ui.ScreenHeight)
 	ebiten.SetWindowTitle("Mazenasium")
 
 	if err := ebiten.RunGame(NewGame()); err != nil {
