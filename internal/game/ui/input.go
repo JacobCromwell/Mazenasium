@@ -90,3 +90,20 @@ func (i *InputHandler) CheckTriviaInput() int {
 func (i *InputHandler) CheckRestartKey() bool {
 	return inpututil.IsKeyJustPressed(ebiten.KeySpace)
 }
+
+// Add to ui/input.go
+func (ih *InputHandler) CheckXRotateLeftKey() bool {
+    return inpututil.IsKeyJustPressed(ebiten.KeyF)
+}
+
+func (ih *InputHandler) CheckXRotateRightKey() bool {
+    return inpututil.IsKeyJustPressed(ebiten.KeyR)
+}
+
+func (ih *InputHandler) CheckConfirmKey() bool {
+    return inpututil.IsKeyJustPressed(ebiten.KeyEnter)
+}
+
+func (ih *InputHandler) CheckCancelKey() bool {
+    return inpututil.IsKeyJustPressed(ebiten.KeyEscape)
+}
