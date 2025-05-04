@@ -14,7 +14,7 @@ import (
 	"github.com/JacobCromwell/Mazenasium/internal/game/npc"
 	"github.com/JacobCromwell/Mazenasium/internal/game/player"
 	"github.com/JacobCromwell/Mazenasium/internal/game/trivia"
-	"github.com/JacobCromwell/Mazenasium/internal/game/turn" // New import
+	"github.com/JacobCromwell/Mazenasium/internal/game/turn"
 )
 
 const (
@@ -137,16 +137,6 @@ func (g *Game) updatePlaying() {
 		// If no NPCs are still moving, process their next action
 		if !g.npcManager.AnyMoving() {
 			g.processNPCTurn()
-		}
-	}
-
-	// Maze rotation (can be done anytime during player's turn)
-	if g.turnManager.IsPlayerTurn() {
-		if ebiten.IsKeyPressed(ebiten.KeyQ) {
-			g.maze.RotateLeft()
-		}
-		if ebiten.IsKeyPressed(ebiten.KeyE) {
-			g.maze.RotateRight()
 		}
 	}
 }
@@ -284,10 +274,6 @@ func (g *Game) drawPlaying(screen *ebiten.Image) {
 	// Draw player
 	playerX, playerY := g.player.GetPosition()
 	ebitenutil.DrawRect(screen, playerX+1, playerY+1, g.player.Size, g.player.Size, color.RGBA{0, 0, 255, 255})
-
-	// Draw circular maze in the corner
-	playerGridX, playerGridY := g.player.GetGridPosition()
-	g.maze.DrawCircular(screen, playerGridX, playerGridY)
 
 	// Draw UI info
 	g.drawUI(screen)
