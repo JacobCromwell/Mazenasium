@@ -37,6 +37,7 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		g.stateManager.NPCManager,
 		g.stateManager.TurnManager,
 		g.stateManager.TriviaMgr,
+		g.stateManager.ActionMgr, // Add ActionMgr parameter
 		g.stateManager.Winner,
 	)
 }

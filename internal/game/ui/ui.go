@@ -1,12 +1,15 @@
+// internal/game/ui/ui.go
 package ui
 
 import (
 	"fmt"
 	"image/color"
+	"strings"
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
 
+	"github.com/JacobCromwell/Mazenasium/internal/game/action"
 	"github.com/JacobCromwell/Mazenasium/internal/game/maze"
 	"github.com/JacobCromwell/Mazenasium/internal/game/npc"
 	"github.com/JacobCromwell/Mazenasium/internal/game/player"
@@ -58,6 +61,7 @@ func (r *Renderer) Draw(
 	npcManager *npc.Manager,
 	turnManager *turn.Manager,
 	triviaManager *trivia.Manager,
+	actionManager *action.Manager, // Added action manager
 	winner string,
 ) {
 	// Draw background
@@ -65,7 +69,7 @@ func (r *Renderer) Draw(
 
 	switch gameState {
 	case 0: // Playing
-		r.drawPlaying(screen, mazeObj, playerObj, npcManager, turnManager)
+		r.drawPlaying(screen, mazeObj, playerObj, npcManager, turnManager, actionManager)
 	case 1: // AnsweringTrivia
 		r.drawTrivia(screen, triviaManager)
 	case 2: // GameOver
@@ -91,6 +95,7 @@ func (r *Renderer) drawPlaying(
 	playerObj *player.Player,
 	npcManager *npc.Manager,
 	turnManager *turn.Manager,
+	actionManager *action.Manager, // Added action manager
 ) {
 	// Draw the maze grid
 	mazeObj.Draw(screen)
@@ -107,9 +112,14 @@ func (r *Renderer) drawPlaying(
 	// Draw UI info
 	r.drawUI(screen, turnManager)
 
+	// Draw action selection popup if in SelectingAction state
+	if turnManager.CurrentState == turn.SelectingAction {
+		r.drawActionPopup(screen, actionManager)
+	}
+
 	// Draw action message if active
 	if r.actionMsg != "" {
-		ebitenutil.DebugPrintAt(screen, r.actionMsg, ScreenWidth/2-50, ScreenHeight/2)
+		ebitenutil.DebugPrintAt(screen, r.actionMsg, ScreenWidth/2-150, ScreenHeight-50)
 	}
 }
 
@@ -123,6 +133,31 @@ func (r *Renderer) drawUI(screen *ebiten.Image, turnManager *turn.Manager) {
 
 	// Draw goal info
 	ebitenutil.DebugPrintAt(screen, "Reach the purple goal to win!", 10, 50)
+}
+
+// Draw the action selection popup
+func (r *Renderer) drawActionPopup(screen *ebiten.Image, actionManager *action.Manager) {
+	// Get formatted list of available actions
+	actionText := actionManager.FormatActionsList()
+	lines := strings.Split(actionText, "\n")
+	
+	// Calculate popup dimensions based on content
+	width := 300
+	height := 40 + (len(lines) * 20)
+	x := (ScreenWidth - width) / 2
+	y := (ScreenHeight - height) / 2
+	
+	// Draw popup background
+	ebitenutil.DrawRect(screen, float64(x), float64(y), float64(width), float64(height), color.RGBA{70, 70, 100, 240})
+	ebitenutil.DrawRect(screen, float64(x+2), float64(y+2), float64(width-4), float64(height-4), color.RGBA{40, 40, 70, 240})
+	
+	// Draw action list
+	for i, line := range lines {
+		ebitenutil.DebugPrintAt(screen, line, x+10, y+20+(i*20))
+	}
+	
+	// Draw instructions at the bottom
+	ebitenutil.DebugPrintAt(screen, "Press number to select, ESC to cancel", x+10, y+height-20)
 }
 
 // Draw the trivia screen

@@ -1,3 +1,4 @@
+// internal/game/state/state.go
 package state
 
 import (
@@ -5,6 +6,7 @@ import (
 	"image/color"
 	"math/rand"
 
+	"github.com/JacobCromwell/Mazenasium/internal/game/action"
 	"github.com/JacobCromwell/Mazenasium/internal/game/maze"
 	"github.com/JacobCromwell/Mazenasium/internal/game/npc"
 	"github.com/JacobCromwell/Mazenasium/internal/game/player"
@@ -30,6 +32,7 @@ type Manager struct {
 	NPCManager   *npc.Manager
 	Maze         *maze.Maze
 	TriviaMgr    *trivia.Manager
+	ActionMgr    *action.Manager // Added ActionManager
 	UIRenderer   *ui.Renderer
 	InputHandler *ui.InputHandler
 	Winner       string
@@ -37,7 +40,6 @@ type Manager struct {
 	// fields for xRotateAction
 	xRotateActive    bool // Whether X-rotate mode is active
 	xRotateDirection int  // 1 for right, -1 for left
-	xRotateCooldown  int  // Cooldown timer for X-rotate ability
 }
 
 // New creates a new game state manager
@@ -52,12 +54,12 @@ func New(screenWidth, screenHeight int) *Manager {
 		NPCManager:       npc.NewManager(),
 		Maze:             maze.New(mazeWidth, mazeHeight, screenWidth-maze.Radius-20, screenHeight-maze.Radius-20),
 		TriviaMgr:        trivia.NewManager(),
+		ActionMgr:        action.NewManager(), // Initialize Action Manager
 		UIRenderer:       ui.NewRenderer(),
 		InputHandler:     ui.NewInputHandler(),
 		Winner:           "",
 		xRotateActive:    false,
 		xRotateDirection: 0,
-		xRotateCooldown:  0,
 	}
 
 	// Create NPCs
@@ -87,15 +89,13 @@ func (m *Manager) Update() {
 
 	// Update action message timer in the UI renderer
 	m.UIRenderer.UpdateActionTimer()
+
+	// Update action cooldowns
+	m.ActionMgr.UpdateCooldowns()
 }
 
 // Update while playing
 func (m *Manager) updatePlaying() {
-	// Update X-rotate cooldown
-	if m.xRotateCooldown > 0 {
-		m.xRotateCooldown--
-	}
-
 	// Update positions for smooth movement
 	m.updatePositions()
 
@@ -115,35 +115,37 @@ func (m *Manager) updatePlaying() {
 		}
 
 	case turn.WaitingForAction:
-		if m.InputHandler.CheckXRotateLeftKey() && m.xRotateCooldown == 0 {
-			playerGridX, playerGridY := m.Player.GetGridPosition()
-			m.Maze.HighlightXRotation(playerGridX, playerGridY)
-			m.xRotateActive = true
-			m.xRotateDirection = -1
-			m.UIRenderer.SetActionMessage("X-Rotate Left? (Confirm: Enter, Cancel: Esc)", 0) // 0 for no timeout
-			return
-		}
-
-		if m.InputHandler.CheckXRotateRightKey() && m.xRotateCooldown == 0 {
-			playerGridX, playerGridY := m.Player.GetGridPosition()
-			m.Maze.HighlightXRotation(playerGridX, playerGridY)
-			m.xRotateActive = true
-			m.xRotateDirection = 1
-			m.UIRenderer.SetActionMessage("X-Rotate Right? (Confirm: Enter, Cancel: Esc)", 0)
-			return
-		}
-
+		// Player can now either show the action menu or end their turn directly
 		if m.InputHandler.CheckActionKey() {
-			m.UIRenderer.SetActionMessage("Action used!", 60)
-			m.TurnManager.NextState(turn.WaitingForEndTurn)
+			// Show action menu
+			m.TurnManager.NextState(turn.SelectingAction)
+		} else if m.InputHandler.CheckEndTurnKey() {
+			// Skip action and end turn
+			m.TurnManager.EndTurn()
+			// Reset NPC movement tracking for the new turn if switching to NPC turn
+			if m.TurnManager.CurrentOwner == turn.NPCTurn {
+				m.NPCManager.ResetMovedStatus()
+			}
 		}
 
-		// Allow skipping the action
-		if m.InputHandler.CheckSkipActionKey() {
-			m.TurnManager.NextState(turn.WaitingForEndTurn)
+	case turn.SelectingAction:
+		// Handle action selection or cancellation
+		if m.InputHandler.CheckCancelKey() {
+			// Return to the WaitingForAction state
+			m.TurnManager.NextState(turn.WaitingForAction)
+			m.UIRenderer.SetActionMessage("Action selection cancelled", 60)
+		} else {
+			// Check for action number input
+			actionNum := m.InputHandler.CheckActionSelectionInput()
+			if actionNum > 0 {
+				// Get the selected action
+				selectedAction := m.ActionMgr.GetActionByNumber(actionNum)
+				if selectedAction != nil {
+					// Process the selected action
+					m.handleActionSelection(*selectedAction)
+				}
+			}
 		}
-
-		m.updatePositions()
 
 	case turn.WaitingForEndTurn:
 		if m.InputHandler.CheckEndTurnKey() {
@@ -160,6 +162,31 @@ func (m *Manager) updatePlaying() {
 		if !m.NPCManager.AnyMoving() {
 			m.processNPCTurn()
 		}
+	}
+}
+
+// Handle the selected action
+func (m *Manager) handleActionSelection(selectedAction action.Action) {
+	switch selectedAction.Type {
+	case action.XRotateLeft:
+		playerGridX, playerGridY := m.Player.GetGridPosition()
+		m.Maze.HighlightXRotation(playerGridX, playerGridY)
+		m.xRotateActive = true
+		m.xRotateDirection = -1
+		m.UIRenderer.SetActionMessage("X-Rotate Left? (Confirm: Enter, Cancel: Esc)", 0) // 0 for no timeout
+		
+	case action.XRotateRight:
+		playerGridX, playerGridY := m.Player.GetGridPosition()
+		m.Maze.HighlightXRotation(playerGridX, playerGridY)
+		m.xRotateActive = true
+		m.xRotateDirection = 1
+		m.UIRenderer.SetActionMessage("X-Rotate Right? (Confirm: Enter, Cancel: Esc)", 0)
+		
+	// Add more cases for future actions
+	
+	default:
+		m.UIRenderer.SetActionMessage("Unknown action selected", 60)
+		m.TurnManager.NextState(turn.WaitingForAction)
 	}
 }
 
@@ -254,7 +281,7 @@ func (m *Manager) updateTrivia() {
 	}
 }
 
-// Add new method to handle X-rotate confirmation
+// Handle X-rotate confirmation
 func (m *Manager) handleXRotateConfirmation() {
 	// Check for confirmation
 	if m.InputHandler.CheckConfirmKey() {
@@ -263,18 +290,17 @@ func (m *Manager) handleXRotateConfirmation() {
 		// Perform the rotation
 		m.Maze.PerformXRotate(playerGridX, playerGridY, m.xRotateDirection)
 
-		// Set cooldown and exit X-rotate mode
-		m.xRotateCooldown = 120 // 2 seconds at 60 FPS
-		m.xRotateActive = false
-
-		// Show action message
+		// Mark the action as used
 		if m.xRotateDirection > 0 {
+			m.ActionMgr.UseAction(action.XRotateRight)
 			m.UIRenderer.SetActionMessage("X-Rotate Right Used!", 60)
 		} else {
+			m.ActionMgr.UseAction(action.XRotateLeft)
 			m.UIRenderer.SetActionMessage("X-Rotate Left Used!", 60)
 		}
 
-		// This counts as using an action
+		// Clear state and move to end turn
+		m.xRotateActive = false
 		m.TurnManager.NextState(turn.WaitingForEndTurn)
 	}
 
@@ -284,5 +310,6 @@ func (m *Manager) handleXRotateConfirmation() {
 		m.Maze.ClearHighlights()
 		m.xRotateActive = false
 		m.UIRenderer.SetActionMessage("X-Rotate Cancelled", 60)
+		m.TurnManager.NextState(turn.WaitingForAction)
 	}
 }

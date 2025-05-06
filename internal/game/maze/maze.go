@@ -144,7 +144,7 @@ func (m *Maze) PerformXRotate(playerX, playerY, direction int) {
 	m.ClearHighlights()
 }
 
-// Update the Draw method to show highlights
+// Update the Draw method to show highlights as outlines instead of filled tiles
 func (m *Maze) Draw(screen *ebiten.Image) {
 	// Draw grid lines and tiles
 	for y := 0; y < m.height; y++ {
@@ -153,33 +153,41 @@ func (m *Maze) Draw(screen *ebiten.Image) {
 			tileX := float64(x) * TileSize
 			tileY := float64(y) * TileSize
 
+			// Determine tile color based on type
+			var tileColor color.RGBA
+			switch m.grid[y][x].tileType {
+			case Wall:
+				tileColor = color.RGBA{70, 70, 70, 255}
+			case Goal:
+				tileColor = color.RGBA{200, 0, 200, 255} // Purple goal
+			default: // Floor
+				tileColor = color.RGBA{200, 200, 200, 100}
+			}
+
+			// Draw the tile
+			ebitenutil.DrawRect(screen, tileX, tileY, TileSize, TileSize, tileColor)
+			
+			// Draw highlighted tile with a 2px red outline instead of filling
+			if m.grid[y][x].highlighted {
+				// Draw 2px red outline around the highlighted tile
+				highlightColor := color.RGBA{255, 0, 0, 255} // Red outline
+				
+				// Top outline
+				ebitenutil.DrawRect(screen, tileX, tileY, TileSize, 2, highlightColor)
+				// Left outline
+				ebitenutil.DrawRect(screen, tileX, tileY, 2, TileSize, highlightColor)
+				// Right outline
+				ebitenutil.DrawRect(screen, tileX+TileSize-2, tileY, 2, TileSize, highlightColor)
+				// Bottom outline
+				ebitenutil.DrawRect(screen, tileX, tileY+TileSize-2, TileSize, 2, highlightColor)
+			}
+			
 			// Draw tile border
 			borderColor := color.RGBA{100, 100, 100, 255}
 			ebitenutil.DrawLine(screen, tileX, tileY, tileX+TileSize, tileY, borderColor)
 			ebitenutil.DrawLine(screen, tileX, tileY, tileX, tileY+TileSize, borderColor)
 			ebitenutil.DrawLine(screen, tileX+TileSize, tileY, tileX+TileSize, tileY+TileSize, borderColor)
 			ebitenutil.DrawLine(screen, tileX, tileY+TileSize, tileX+TileSize, tileY+TileSize, borderColor)
-
-			// Determine tile color based on type and highlight status
-			var tileColor color.RGBA
-
-			if m.grid[y][x].highlighted {
-				// Highlighted tiles are red-tinted
-				tileColor = color.RGBA{255, 100, 100, 255}
-			} else {
-				// Normal coloring based on tile type
-				switch m.grid[y][x].tileType {
-				case Wall:
-					tileColor = color.RGBA{70, 70, 70, 255}
-				case Goal:
-					tileColor = color.RGBA{200, 0, 200, 255} // Purple goal
-				default: // Floor
-					tileColor = color.RGBA{200, 200, 200, 100}
-				}
-			}
-
-			// Draw the tile
-			ebitenutil.DrawRect(screen, tileX, tileY, TileSize, TileSize, tileColor)
 		}
 	}
 }
