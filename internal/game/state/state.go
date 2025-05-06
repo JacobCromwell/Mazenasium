@@ -165,6 +165,77 @@ func (m *Manager) updatePlaying() {
 	}
 }
 
+// internal/game/state/state.go
+
+// Add this method to the Manager struct to collect entity positions
+func (m *Manager) collectEntityPositions() []maze.Position {
+	positions := []maze.Position{}
+	
+	// Add player position
+	playerGridX, playerGridY := m.Player.GetGridPosition()
+	positions = append(positions, maze.Position{X: playerGridX, Y: playerGridY})
+	
+	// Add NPC positions
+	for _, npc := range m.NPCManager.NPCs {
+		positions = append(positions, maze.Position{X: npc.GridX, Y: npc.GridY})
+	}
+	
+	return positions
+}
+
+// Modify the handleXRotateConfirmation method to check for collisions
+func (m *Manager) handleXRotateConfirmation() {
+	// Check for confirmation
+	if m.InputHandler.CheckConfirmKey() {
+		playerGridX, playerGridY := m.Player.GetGridPosition()
+		
+		// Collect all entity positions
+		entityPositions := m.collectEntityPositions()
+		
+		// Check for collisions
+		hasCollision := m.Maze.CheckXRotateCollisions(
+			playerGridX, 
+			playerGridY, 
+			m.xRotateDirection, 
+			entityPositions,
+		)
+		
+		if hasCollision {
+			// Cancel the action due to collision
+			m.Maze.ClearHighlights()
+			m.xRotateActive = false
+			m.UIRenderer.SetActionMessage("Cannot move wall segments on top of players or NPCs", 120)
+			m.TurnManager.NextState(turn.WaitingForAction)
+			return
+		}
+
+		// No collision, perform the rotation
+		m.Maze.PerformXRotate(playerGridX, playerGridY, m.xRotateDirection)
+
+		// Mark the action as used
+		if m.xRotateDirection > 0 {
+			m.ActionMgr.UseAction(action.XRotateRight)
+			m.UIRenderer.SetActionMessage("X-Rotate Right Used!", 60)
+		} else {
+			m.ActionMgr.UseAction(action.XRotateLeft)
+			m.UIRenderer.SetActionMessage("X-Rotate Left Used!", 60)
+		}
+
+		// Clear state and move to end turn
+		m.xRotateActive = false
+		m.TurnManager.NextState(turn.WaitingForEndTurn)
+	}
+
+	// Check for cancellation
+	if m.InputHandler.CheckCancelKey() {
+		// Clear highlights and exit X-rotate mode
+		m.Maze.ClearHighlights()
+		m.xRotateActive = false
+		m.UIRenderer.SetActionMessage("X-Rotate Cancelled", 60)
+		m.TurnManager.NextState(turn.WaitingForAction)
+	}
+}
+
 // Handle the selected action
 func (m *Manager) handleActionSelection(selectedAction action.Action) {
 	switch selectedAction.Type {
@@ -277,39 +348,6 @@ func (m *Manager) updateTrivia() {
 
 		// Return to game after brief delay
 		m.CurrentState = Playing
-		m.TurnManager.NextState(turn.WaitingForAction)
-	}
-}
-
-// Handle X-rotate confirmation
-func (m *Manager) handleXRotateConfirmation() {
-	// Check for confirmation
-	if m.InputHandler.CheckConfirmKey() {
-		playerGridX, playerGridY := m.Player.GetGridPosition()
-
-		// Perform the rotation
-		m.Maze.PerformXRotate(playerGridX, playerGridY, m.xRotateDirection)
-
-		// Mark the action as used
-		if m.xRotateDirection > 0 {
-			m.ActionMgr.UseAction(action.XRotateRight)
-			m.UIRenderer.SetActionMessage("X-Rotate Right Used!", 60)
-		} else {
-			m.ActionMgr.UseAction(action.XRotateLeft)
-			m.UIRenderer.SetActionMessage("X-Rotate Left Used!", 60)
-		}
-
-		// Clear state and move to end turn
-		m.xRotateActive = false
-		m.TurnManager.NextState(turn.WaitingForEndTurn)
-	}
-
-	// Check for cancellation
-	if m.InputHandler.CheckCancelKey() {
-		// Clear highlights and exit X-rotate mode
-		m.Maze.ClearHighlights()
-		m.xRotateActive = false
-		m.UIRenderer.SetActionMessage("X-Rotate Cancelled", 60)
 		m.TurnManager.NextState(turn.WaitingForAction)
 	}
 }

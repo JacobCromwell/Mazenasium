@@ -1,4 +1,3 @@
-// internal/game/ui/ui.go
 package ui
 
 import (
@@ -119,7 +118,15 @@ func (r *Renderer) drawPlaying(
 
 	// Draw action message if active
 	if r.actionMsg != "" {
-		ebitenutil.DebugPrintAt(screen, r.actionMsg, ScreenWidth/2-150, ScreenHeight-50)
+		// Calculate message width for centering
+		msgWidth := len(r.actionMsg) * 7 // Approximate width based on character count
+		
+		// Draw a background rectangle for the message
+		msgBgX := ScreenWidth/2 - msgWidth/2 - 10
+		msgBgWidth := msgWidth + 20
+		
+		ebitenutil.DrawRect(screen, float64(msgBgX), ScreenHeight-60, float64(msgBgWidth), 30, color.RGBA{0, 0, 0, 180})
+		ebitenutil.DebugPrintAt(screen, r.actionMsg, ScreenWidth/2-msgWidth/2, ScreenHeight-50)
 	}
 }
 
@@ -142,8 +149,25 @@ func (r *Renderer) drawActionPopup(screen *ebiten.Image, actionManager *action.M
 	lines := strings.Split(actionText, "\n")
 	
 	// Calculate popup dimensions based on content
-	width := 300
-	height := 40 + (len(lines) * 20)
+	// Find the longest line to determine width
+	maxLineLength := 0
+	for _, line := range lines {
+		if len(line) > maxLineLength {
+			maxLineLength = len(line)
+		}
+	}
+	
+	// Calculate width and height with padding
+	width := maxLineLength*7 + 40 // Approximate width based on character count plus padding
+	if width < 300 {
+		width = 300 // Minimum width
+	}
+	
+	height := 40 + (len(lines) * 20) // Height based on number of lines plus padding
+	if height < 100 {
+		height = 100 // Minimum height
+	}
+	
 	x := (ScreenWidth - width) / 2
 	y := (ScreenHeight - height) / 2
 	
@@ -189,6 +213,9 @@ func (r *Renderer) drawTrivia(screen *ebiten.Image, triviaManager *trivia.Manage
 			//resultColor = color.RGBA{0, 255, 0, 255}
 		}
 
-		ebitenutil.DebugPrintAt(screen, resultText, ScreenWidth/2-40, ScreenHeight/2)
+		// Calculate message width for centering
+		msgWidth := len(resultText) * 9 // Approximate width based on character count
+		
+		ebitenutil.DebugPrintAt(screen, resultText, ScreenWidth/2-msgWidth/2, ScreenHeight/2)
 	}
 }
