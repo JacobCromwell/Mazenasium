@@ -3,10 +3,12 @@ package ui
 import (
 	"fmt"
 	"image/color"
+	"strings"
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
 
+	"github.com/JacobCromwell/Mazenasium/internal/game/action"
 	"github.com/JacobCromwell/Mazenasium/internal/game/maze"
 	"github.com/JacobCromwell/Mazenasium/internal/game/npc"
 	"github.com/JacobCromwell/Mazenasium/internal/game/player"
@@ -58,6 +60,7 @@ func (r *Renderer) Draw(
 	npcManager *npc.Manager,
 	turnManager *turn.Manager,
 	triviaManager *trivia.Manager,
+	actionManager *action.Manager, // Added action manager
 	winner string,
 ) {
 	// Draw background
@@ -65,7 +68,7 @@ func (r *Renderer) Draw(
 
 	switch gameState {
 	case 0: // Playing
-		r.drawPlaying(screen, mazeObj, playerObj, npcManager, turnManager)
+		r.drawPlaying(screen, mazeObj, playerObj, npcManager, turnManager, actionManager)
 	case 1: // AnsweringTrivia
 		r.drawTrivia(screen, triviaManager)
 	case 2: // GameOver
@@ -91,6 +94,7 @@ func (r *Renderer) drawPlaying(
 	playerObj *player.Player,
 	npcManager *npc.Manager,
 	turnManager *turn.Manager,
+	actionManager *action.Manager, // Added action manager
 ) {
 	// Draw the maze grid
 	mazeObj.Draw(screen)
@@ -107,9 +111,22 @@ func (r *Renderer) drawPlaying(
 	// Draw UI info
 	r.drawUI(screen, turnManager)
 
+	// Draw action selection popup if in SelectingAction state
+	if turnManager.CurrentState == turn.SelectingAction {
+		r.drawActionPopup(screen, actionManager)
+	}
+
 	// Draw action message if active
 	if r.actionMsg != "" {
-		ebitenutil.DebugPrintAt(screen, r.actionMsg, ScreenWidth/2-50, ScreenHeight/2)
+		// Calculate message width for centering
+		msgWidth := len(r.actionMsg) * 7 // Approximate width based on character count
+		
+		// Draw a background rectangle for the message
+		msgBgX := ScreenWidth/2 - msgWidth/2 - 10
+		msgBgWidth := msgWidth + 20
+		
+		ebitenutil.DrawRect(screen, float64(msgBgX), ScreenHeight-60, float64(msgBgWidth), 30, color.RGBA{0, 0, 0, 180})
+		ebitenutil.DebugPrintAt(screen, r.actionMsg, ScreenWidth/2-msgWidth/2, ScreenHeight-50)
 	}
 }
 
@@ -123,6 +140,48 @@ func (r *Renderer) drawUI(screen *ebiten.Image, turnManager *turn.Manager) {
 
 	// Draw goal info
 	ebitenutil.DebugPrintAt(screen, "Reach the purple goal to win!", 10, 50)
+}
+
+// Draw the action selection popup
+func (r *Renderer) drawActionPopup(screen *ebiten.Image, actionManager *action.Manager) {
+	// Get formatted list of available actions
+	actionText := actionManager.FormatActionsList()
+	lines := strings.Split(actionText, "\n")
+	
+	// Calculate popup dimensions based on content
+	// Find the longest line to determine width
+	maxLineLength := 0
+	for _, line := range lines {
+		if len(line) > maxLineLength {
+			maxLineLength = len(line)
+		}
+	}
+	
+	// Calculate width and height with padding
+	width := maxLineLength*7 + 40 // Approximate width based on character count plus padding
+	if width < 300 {
+		width = 300 // Minimum width
+	}
+	
+	height := 40 + (len(lines) * 20) // Height based on number of lines plus padding
+	if height < 100 {
+		height = 100 // Minimum height
+	}
+	
+	x := (ScreenWidth - width) / 2
+	y := (ScreenHeight - height) / 2
+	
+	// Draw popup background
+	ebitenutil.DrawRect(screen, float64(x), float64(y), float64(width), float64(height), color.RGBA{70, 70, 100, 240})
+	ebitenutil.DrawRect(screen, float64(x+2), float64(y+2), float64(width-4), float64(height-4), color.RGBA{40, 40, 70, 240})
+	
+	// Draw action list
+	for i, line := range lines {
+		ebitenutil.DebugPrintAt(screen, line, x+10, y+20+(i*20))
+	}
+	
+	// Draw instructions at the bottom
+	ebitenutil.DebugPrintAt(screen, "Press number to select, ESC to cancel", x+10, y+height-20)
 }
 
 // Draw the trivia screen
@@ -154,6 +213,9 @@ func (r *Renderer) drawTrivia(screen *ebiten.Image, triviaManager *trivia.Manage
 			//resultColor = color.RGBA{0, 255, 0, 255}
 		}
 
-		ebitenutil.DebugPrintAt(screen, resultText, ScreenWidth/2-40, ScreenHeight/2)
+		// Calculate message width for centering
+		msgWidth := len(resultText) * 9 // Approximate width based on character count
+		
+		ebitenutil.DebugPrintAt(screen, resultText, ScreenWidth/2-msgWidth/2, ScreenHeight/2)
 	}
 }

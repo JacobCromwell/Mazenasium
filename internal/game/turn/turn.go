@@ -1,3 +1,4 @@
+// internal/game/turn/turn.go
 package turn
 
 // State represents the current state within a turn
@@ -6,9 +7,10 @@ type State int
 const (
 	WaitingForMove State = iota
 	WaitingForTrivia
-	WaitingForAction
+	WaitingForAction // Now optional
 	WaitingForEndTurn
 	ProcessingNPCTurn
+	SelectingAction // New state for action selection popup
 )
 
 // Owner represents who currently has a turn
@@ -60,7 +62,9 @@ func (m *Manager) StateText() string {
 	case WaitingForMove:
 		return "Arrow Keys: Move"
 	case WaitingForAction:
-		return "A: Use Action, Tab: Skip"
+		return "A: Show Actions, Space: End Turn"
+	case SelectingAction:
+		return "Enter 1-9 to select action"
 	case WaitingForEndTurn:
 		return "Space: End Turn"
 	case ProcessingNPCTurn:

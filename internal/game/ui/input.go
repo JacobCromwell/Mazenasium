@@ -1,3 +1,4 @@
+// internal/game/ui/input.go
 package ui
 
 import (
@@ -91,19 +92,55 @@ func (i *InputHandler) CheckRestartKey() bool {
 	return inpututil.IsKeyJustPressed(ebiten.KeySpace)
 }
 
-// Add to ui/input.go
+// CheckXRotateLeftKey checks if the X-rotate left key was pressed
 func (ih *InputHandler) CheckXRotateLeftKey() bool {
     return inpututil.IsKeyJustPressed(ebiten.KeyF)
 }
 
+// CheckXRotateRightKey checks if the X-rotate right key was pressed
 func (ih *InputHandler) CheckXRotateRightKey() bool {
     return inpututil.IsKeyJustPressed(ebiten.KeyR)
 }
 
+// CheckConfirmKey checks if the confirm key was pressed
 func (ih *InputHandler) CheckConfirmKey() bool {
     return inpututil.IsKeyJustPressed(ebiten.KeyEnter)
 }
 
+// CheckCancelKey checks if the cancel key was pressed
 func (ih *InputHandler) CheckCancelKey() bool {
     return inpututil.IsKeyJustPressed(ebiten.KeyEscape)
+}
+
+// CheckActionSelectionInput checks for action selection input (1-9)
+// Returns: 0 for no input, 1-9 for action selection
+func (i *InputHandler) CheckActionSelectionInput() int {
+    if inpututil.IsKeyJustPressed(ebiten.Key1) {
+        return 1
+    }
+    if inpututil.IsKeyJustPressed(ebiten.Key2) {
+        return 2
+    }
+    if inpututil.IsKeyJustPressed(ebiten.Key3) {
+        return 3
+    }
+    if inpututil.IsKeyJustPressed(ebiten.Key4) {
+        return 4
+    }
+    if inpututil.IsKeyJustPressed(ebiten.Key5) {
+        return 5
+    }
+    if inpututil.IsKeyJustPressed(ebiten.Key6) {
+        return 6
+    }
+    if inpututil.IsKeyJustPressed(ebiten.Key7) {
+        return 7
+    }
+    if inpututil.IsKeyJustPressed(ebiten.Key8) {
+        return 8
+    }
+    if inpututil.IsKeyJustPressed(ebiten.Key9) {
+        return 9
+    }
+    return 0
 }
