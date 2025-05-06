@@ -10,7 +10,7 @@ import (
 
 // Constants used by maze package
 const (
-	Radius = 120 // Radius of the circular maze
+	Radius   = 120 // Radius of the circular maze
 	TileSize = 40  // Size of each tile in the maze
 )
 
@@ -21,6 +21,7 @@ const (
 	Floor TileType = iota
 	Wall
 	Goal
+	// New tile types can be added here as needed
 )
 
 // Maze represents the maze grid
@@ -32,15 +33,15 @@ type Maze struct {
 	goalX, goalY  int // Track goal position
 }
 
-// MazeTile represents a single tile in the maze
+// Enhanced MazeTile struct with rotation properties
 type MazeTile struct {
-	tileType TileType
-	visited  bool
-	hasItem  bool
-	itemType int
+	tileType    TileType
+	visited     bool
+	hasItem     bool
+	itemType    int
+	highlighted bool // For showing which tiles will be affected by rotation
 }
 
-// New creates a new maze with the specified dimensions
 func New(width, height int, centerX int, centerY int) *Maze {
 	goalX := width - 2  // Goal near the bottom-right corner
 	goalY := height - 2
@@ -56,7 +57,7 @@ func New(width, height int, centerX int, centerY int) *Maze {
 	}
 }
 
-// Create a simple maze grid with a goal
+// Add these functions to the Maze struct
 func createMazeGrid(width, height, goalX, goalY int) [][]MazeTile {
 	grid := make([][]MazeTile, height)
 	for y := range grid {
@@ -82,7 +83,68 @@ func createMazeGrid(width, height, goalX, goalY int) [][]MazeTile {
 	return grid
 }
 
-// Draw the maze grid
+// HighlightXRotation highlights tiles that would be affected by X-rotation
+func (m *Maze) HighlightXRotation(playerX, playerY int) {
+	// Clear any existing highlights first
+	m.ClearHighlights()
+
+	// Highlight all tiles in the same row as the player (excluding the player's position)
+	for x := 0; x < m.width; x++ {
+		// Skip player position
+		if x == playerX {
+			continue
+		}
+
+		// Only highlight tiles that can be rotated (not walls at the edge)
+		if x > 0 && x < m.width-1 {
+			m.grid[playerY][x].highlighted = true
+		}
+	}
+}
+
+// ClearHighlights removes all highlighting
+func (m *Maze) ClearHighlights() {
+	for y := 0; y < m.height; y++ {
+		for x := 0; x < m.width; x++ {
+			m.grid[y][x].highlighted = false
+		}
+	}
+}
+
+// PerformXRotate performs the actual rotation of tiles on the X-axis
+func (m *Maze) PerformXRotate(playerX, playerY, direction int) {
+	// Create a copy of the current row for rotation
+	tempRow := make([]MazeTile, m.width)
+	for x := 0; x < m.width; x++ {
+		tempRow[x] = m.grid[playerY][x]
+	}
+
+	// Perform the rotation for each tile (except boundary walls)
+	for x := 1; x < m.width-1; x++ {
+		// Skip the player's position
+		if x == playerX {
+			continue
+		}
+
+		// Calculate new position
+		newX := x + direction
+
+		// Handle wrapping within the playable area (excluding boundary walls)
+		if newX <= 0 {
+			newX = m.width - 2
+		} else if newX >= m.width-1 {
+			newX = 1
+		}
+
+		// Move the tile
+		m.grid[playerY][newX] = tempRow[x]
+	}
+
+	// Clear highlights after rotation
+	m.ClearHighlights()
+}
+
+// Update the Draw method to show highlights
 func (m *Maze) Draw(screen *ebiten.Image) {
 	// Draw grid lines and tiles
 	for y := 0; y < m.height; y++ {
@@ -98,15 +160,26 @@ func (m *Maze) Draw(screen *ebiten.Image) {
 			ebitenutil.DrawLine(screen, tileX+TileSize, tileY, tileX+TileSize, tileY+TileSize, borderColor)
 			ebitenutil.DrawLine(screen, tileX, tileY+TileSize, tileX+TileSize, tileY+TileSize, borderColor)
 
-			// Draw different tile types
-			switch m.grid[y][x].tileType {
-			case Wall:
-				ebitenutil.DrawRect(screen, tileX, tileY, TileSize, TileSize, color.RGBA{70, 70, 70, 255})
-			case Goal:
-				ebitenutil.DrawRect(screen, tileX, tileY, TileSize, TileSize, color.RGBA{200, 0, 200, 255}) // Purple goal
-			default: // Floor
-				ebitenutil.DrawRect(screen, tileX, tileY, TileSize, TileSize, color.RGBA{200, 200, 200, 100})
+			// Determine tile color based on type and highlight status
+			var tileColor color.RGBA
+
+			if m.grid[y][x].highlighted {
+				// Highlighted tiles are red-tinted
+				tileColor = color.RGBA{255, 100, 100, 255}
+			} else {
+				// Normal coloring based on tile type
+				switch m.grid[y][x].tileType {
+				case Wall:
+					tileColor = color.RGBA{70, 70, 70, 255}
+				case Goal:
+					tileColor = color.RGBA{200, 0, 200, 255} // Purple goal
+				default: // Floor
+					tileColor = color.RGBA{200, 200, 200, 100}
+				}
 			}
+
+			// Draw the tile
+			ebitenutil.DrawRect(screen, tileX, tileY, TileSize, TileSize, tileColor)
 		}
 	}
 }

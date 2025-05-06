@@ -2,8 +2,8 @@ package state
 
 import (
 	"fmt"
-	"math/rand"
 	"image/color"
+	"math/rand"
 
 	"github.com/JacobCromwell/Mazenasium/internal/game/maze"
 	"github.com/JacobCromwell/Mazenasium/internal/game/npc"
@@ -33,6 +33,11 @@ type Manager struct {
 	UIRenderer   *ui.Renderer
 	InputHandler *ui.InputHandler
 	Winner       string
+
+	// fields for xRotateAction
+	xRotateActive    bool // Whether X-rotate mode is active
+	xRotateDirection int  // 1 for right, -1 for left
+	xRotateCooldown  int  // Cooldown timer for X-rotate ability
 }
 
 // New creates a new game state manager
@@ -41,21 +46,24 @@ func New(screenWidth, screenHeight int) *Manager {
 	mazeHeight := 10
 
 	manager := &Manager{
-		CurrentState: Playing,
-		TurnManager:  turn.NewManager(),
-		Player:       player.New(1, 1, maze.TileSize),
-		NPCManager:   npc.NewManager(),
-		Maze:         maze.New(mazeWidth, mazeHeight, screenWidth-maze.Radius-20, screenHeight-maze.Radius-20),
-		TriviaMgr:    trivia.NewManager(),
-		UIRenderer:   ui.NewRenderer(),
-		InputHandler: ui.NewInputHandler(),
-		Winner:       "",
+		CurrentState:     Playing,
+		TurnManager:      turn.NewManager(),
+		Player:           player.New(1, 1, maze.TileSize),
+		NPCManager:       npc.NewManager(),
+		Maze:             maze.New(mazeWidth, mazeHeight, screenWidth-maze.Radius-20, screenHeight-maze.Radius-20),
+		TriviaMgr:        trivia.NewManager(),
+		UIRenderer:       ui.NewRenderer(),
+		InputHandler:     ui.NewInputHandler(),
+		Winner:           "",
+		xRotateActive:    false,
+		xRotateDirection: 0,
+		xRotateCooldown:  0,
 	}
 
 	// Create NPCs
 	npc1 := npc.New(0, 3, 3, maze.TileSize, color.RGBA{255, 0, 0, 255})
 	npc2 := npc.New(1, 5, 5, maze.TileSize, color.RGBA{0, 255, 0, 255})
-	
+
 	// Add NPCs to manager
 	manager.NPCManager.AddNPC(npc1)
 	manager.NPCManager.AddNPC(npc2)
@@ -83,8 +91,19 @@ func (m *Manager) Update() {
 
 // Update while playing
 func (m *Manager) updatePlaying() {
+	// Update X-rotate cooldown
+	if m.xRotateCooldown > 0 {
+		m.xRotateCooldown--
+	}
+
 	// Update positions for smooth movement
 	m.updatePositions()
+
+	// If X-rotate is active, handle confirmation or cancellation
+	if m.xRotateActive {
+		m.handleXRotateConfirmation()
+		return
+	}
 
 	// Process based on turn state
 	switch m.TurnManager.CurrentState {
@@ -96,6 +115,24 @@ func (m *Manager) updatePlaying() {
 		}
 
 	case turn.WaitingForAction:
+		if m.InputHandler.CheckXRotateLeftKey() && m.xRotateCooldown == 0 {
+			playerGridX, playerGridY := m.Player.GetGridPosition()
+			m.Maze.HighlightXRotation(playerGridX, playerGridY)
+			m.xRotateActive = true
+			m.xRotateDirection = -1
+			m.UIRenderer.SetActionMessage("X-Rotate Left? (Confirm: Enter, Cancel: Esc)", 0) // 0 for no timeout
+			return
+		}
+
+		if m.InputHandler.CheckXRotateRightKey() && m.xRotateCooldown == 0 {
+			playerGridX, playerGridY := m.Player.GetGridPosition()
+			m.Maze.HighlightXRotation(playerGridX, playerGridY)
+			m.xRotateActive = true
+			m.xRotateDirection = 1
+			m.UIRenderer.SetActionMessage("X-Rotate Right? (Confirm: Enter, Cancel: Esc)", 0)
+			return
+		}
+
 		if m.InputHandler.CheckActionKey() {
 			m.UIRenderer.SetActionMessage("Action used!", 60)
 			m.TurnManager.NextState(turn.WaitingForEndTurn)
@@ -105,6 +142,8 @@ func (m *Manager) updatePlaying() {
 		if m.InputHandler.CheckSkipActionKey() {
 			m.TurnManager.NextState(turn.WaitingForEndTurn)
 		}
+
+		m.updatePositions()
 
 	case turn.WaitingForEndTurn:
 		if m.InputHandler.CheckEndTurnKey() {
@@ -128,7 +167,7 @@ func (m *Manager) updatePlaying() {
 func (m *Manager) updatePositions() {
 	// Update player position with smooth movement
 	playerGridX, playerGridY := m.Player.GetGridPosition()
-	
+
 	// Update player, and check if they've arrived at destination
 	if arrived := m.Player.Update(5.0); arrived {
 		// Check if player reached the goal
@@ -149,7 +188,7 @@ func (m *Manager) updatePositions() {
 
 	// Update NPCs positions using the manager
 	arrivedNPCs := m.NPCManager.UpdatePositions(5.0)
-	
+
 	// Check if any NPCs reached the goal
 	for _, arrivedNPC := range arrivedNPCs {
 		if m.Maze.IsGoal(arrivedNPC.GridX, arrivedNPC.GridY) {
@@ -168,12 +207,12 @@ func (m *Manager) handlePlayerMovement() {
 
 	playerGridX, playerGridY := m.Player.GetGridPosition()
 	dx, dy := m.InputHandler.CheckPlayerMovement()
-	
+
 	if dx == 0 && dy == 0 {
 		return // No movement input
 	}
-	
-	newGridX, newGridY := playerGridX + dx, playerGridY + dy
+
+	newGridX, newGridY := playerGridX+dx, playerGridY+dy
 
 	// Check if movement is valid (not a wall and within bounds)
 	if m.Maze.IsValidMove(newGridX, newGridY) {
@@ -194,7 +233,7 @@ func (m *Manager) processNPCTurn() {
 	validMoveFn := func(x, y int) bool {
 		return m.Maze.IsValidMove(x, y)
 	}
-	
+
 	m.NPCManager.ProcessTurn(validMoveFn)
 }
 
@@ -202,15 +241,48 @@ func (m *Manager) processNPCTurn() {
 func (m *Manager) updateTrivia() {
 	// Get input from the input handler
 	answer := m.InputHandler.CheckTriviaInput()
-	
+
 	if answer > 0 {
 		// Process the answer
 		correct := m.TriviaMgr.CheckAnswer(answer - 1) // Convert from 1-based to 0-based
 		m.TriviaMgr.Answered = true
 		m.TriviaMgr.Correct = correct
-		
+
 		// Return to game after brief delay
 		m.CurrentState = Playing
 		m.TurnManager.NextState(turn.WaitingForAction)
+	}
+}
+
+// Add new method to handle X-rotate confirmation
+func (m *Manager) handleXRotateConfirmation() {
+	// Check for confirmation
+	if m.InputHandler.CheckConfirmKey() {
+		playerGridX, playerGridY := m.Player.GetGridPosition()
+
+		// Perform the rotation
+		m.Maze.PerformXRotate(playerGridX, playerGridY, m.xRotateDirection)
+
+		// Set cooldown and exit X-rotate mode
+		m.xRotateCooldown = 120 // 2 seconds at 60 FPS
+		m.xRotateActive = false
+
+		// Show action message
+		if m.xRotateDirection > 0 {
+			m.UIRenderer.SetActionMessage("X-Rotate Right Used!", 60)
+		} else {
+			m.UIRenderer.SetActionMessage("X-Rotate Left Used!", 60)
+		}
+
+		// This counts as using an action
+		m.TurnManager.NextState(turn.WaitingForEndTurn)
+	}
+
+	// Check for cancellation
+	if m.InputHandler.CheckCancelKey() {
+		// Clear highlights and exit X-rotate mode
+		m.Maze.ClearHighlights()
+		m.xRotateActive = false
+		m.UIRenderer.SetActionMessage("X-Rotate Cancelled", 60)
 	}
 }
