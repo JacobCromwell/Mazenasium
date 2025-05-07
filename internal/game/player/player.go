@@ -6,7 +6,7 @@ import (
 
 // Constants related to player
 const (
-	Size = 38 // Player size (2 pixels smaller than tile)
+	Size = 28 // Player size (reduced from 38 to match smaller tile size)
 )
 
 // Player represents the player character
