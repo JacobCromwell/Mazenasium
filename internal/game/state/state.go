@@ -44,6 +44,7 @@ type Manager struct {
 
 // New creates a new game state manager
 func New(screenWidth, screenHeight int) *Manager {
+	// Increased base size for the maze - will be doubled in maze.New
 	mazeWidth := 10
 	mazeHeight := 10
 
@@ -52,7 +53,7 @@ func New(screenWidth, screenHeight int) *Manager {
 		TurnManager:      turn.NewManager(),
 		Player:           player.New(1, 1, maze.TileSize),
 		NPCManager:       npc.NewManager(),
-		Maze:             maze.New(mazeWidth, mazeHeight, screenWidth-maze.Radius-20, screenHeight-maze.Radius-20),
+		Maze:             maze.New(mazeWidth, mazeHeight, 0, 0), // Let maze fill the screen
 		TriviaMgr:        trivia.NewManager(),
 		ActionMgr:        action.NewManager(), // Initialize Action Manager
 		UIRenderer:       ui.NewRenderer(),
@@ -164,8 +165,6 @@ func (m *Manager) updatePlaying() {
 		}
 	}
 }
-
-// internal/game/state/state.go
 
 // Add this method to the Manager struct to collect entity positions
 func (m *Manager) collectEntityPositions() []maze.Position {
