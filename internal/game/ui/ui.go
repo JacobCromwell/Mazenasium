@@ -161,10 +161,10 @@ func (r *Renderer) drawPlaying(
 	playerObj *player.Player,
 	npcManager *npc.Manager,
 	turnManager *turn.Manager,
-	actionManager *action.Manager, // Added action manager
+	actionManager *action.Manager,
 ) {
-	// Draw the maze grid
-	mazeObj.Draw(screen)
+	// Draw the maze grid using our new function
+	DrawMaze(screen, mazeObj, 0, 0) // Use 0, 0 as the offset (or adjust as needed)
 
 	// Draw NPCs
 	for _, npc := range npcManager.NPCs {
@@ -286,3 +286,4 @@ func (r *Renderer) drawTrivia(screen *ebiten.Image, triviaManager *trivia.Manage
 		DrawText(screen, resultText, ScreenWidth/2-msgWidth/2, ScreenHeight/2)
 	}
 }
+
