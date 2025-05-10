@@ -14,6 +14,8 @@ import (
 	"github.com/JacobCromwell/Mazenasium/internal/game/player"
 	"github.com/JacobCromwell/Mazenasium/internal/game/trivia"
 	"github.com/JacobCromwell/Mazenasium/internal/game/turn"
+	//"github.com/JacobCromwell/Mazenasium/internal/game/flavor"
+	"github.com/JacobCromwell/Mazenasium/internal/game/menu"
 )
 
 const (
@@ -51,30 +53,95 @@ func (r *Renderer) UpdateActionTimer() {
 	}
 }
 
-// Draw renders the entire game based on state
-func (r *Renderer) Draw(
-	screen *ebiten.Image,
-	gameState int, // GameState
-	mazeObj *maze.Maze,
-	playerObj *player.Player,
-	npcManager *npc.Manager,
-	turnManager *turn.Manager,
-	triviaManager *trivia.Manager,
-	actionManager *action.Manager, // Added action manager
-	winner string,
-) {
-	// Draw background
-	screen.Fill(color.RGBA{40, 45, 55, 255})
-
-	switch gameState {
-	case 0: // Playing
-		r.drawPlaying(screen, mazeObj, playerObj, npcManager, turnManager, actionManager)
-	case 1: // AnsweringTrivia
-		r.drawTrivia(screen, triviaManager)
-	case 2: // GameOver
-		r.drawGameOver(screen, winner)
-	}
+// Add this method to the Renderer struct
+func (r *Renderer) drawMenu(screen *ebiten.Image, menuManager *menu.Manager) {
+    if menuManager == nil || menuManager.CurrentMenu == nil {
+        return
+    }
+    
+    currentMenu := menuManager.CurrentMenu
+    
+    // Draw menu background
+    ebitenutil.DrawRect(screen, 100, 100, ScreenWidth-200, ScreenHeight-200, color.RGBA{50, 50, 80, 240})
+    
+    // Draw menu title
+    titleX := ScreenWidth/2 - len(currentMenu.Title)*4
+    ebitenutil.DebugPrintAt(screen, currentMenu.Title, titleX, 120)
+    
+    // Draw menu items
+    for i, item := range currentMenu.Items {
+        itemY := 160 + (i * 40)
+        itemText := item.Text
+        
+        // Add indicator for submenu
+        if item.Type == menu.SubmenuItem {
+            itemText += " ►"
+        }
+        
+        // Draw selection indicator for selected item
+        if item.Selected {
+            ebitenutil.DebugPrintAt(screen, "> " + itemText, ScreenWidth/2 - 100, itemY)
+        } else {
+            ebitenutil.DebugPrintAt(screen, "  " + itemText, ScreenWidth/2 - 100, itemY)
+        }
+    }
+    
+    // Draw instructions
+    ebitenutil.DebugPrintAt(screen, "↑/↓: Navigate, Enter: Select", ScreenWidth/2 - 120, ScreenHeight - 150)
 }
+
+// Update the Draw method to include the menu state
+func (r *Renderer) Draw(
+    screen *ebiten.Image,
+    gameState int, // GameState
+    mazeObj *maze.Maze,
+    playerObj *player.Player,
+    npcManager *npc.Manager,
+    turnManager *turn.Manager,
+    triviaManager *trivia.Manager,
+    actionManager *action.Manager,
+    menuManager *menu.Manager, // Add menu manager
+    winner string,
+) {
+    // Draw background
+    screen.Fill(color.RGBA{40, 45, 55, 255})
+
+    switch gameState {
+    case 0: // Menu
+        r.drawMenu(screen, menuManager)
+    case 1: // Playing
+        r.drawPlaying(screen, mazeObj, playerObj, npcManager, turnManager, actionManager)
+    case 2: // AnsweringTrivia
+        r.drawTrivia(screen, triviaManager)
+    case 3: // GameOver
+        r.drawGameOver(screen, winner)
+    }
+}
+
+// Draw renders the entire game based on state
+// func (r *Renderer) Draw(
+// 	screen *ebiten.Image,
+// 	gameState int, // GameState
+// 	mazeObj *maze.Maze,
+// 	playerObj *player.Player,
+// 	npcManager *npc.Manager,
+// 	turnManager *turn.Manager,
+// 	triviaManager *trivia.Manager,
+// 	actionManager *action.Manager, // Added action manager
+// 	winner string,
+// ) {
+// 	// Draw background
+// 	screen.Fill(color.RGBA{40, 45, 55, 255})
+
+// 	switch gameState {
+// 	case 0: // Playing
+// 		r.drawPlaying(screen, mazeObj, playerObj, npcManager, turnManager, actionManager)
+// 	case 1: // AnsweringTrivia
+// 		r.drawTrivia(screen, triviaManager)
+// 	case 2: // GameOver
+// 		r.drawGameOver(screen, winner)
+// 	}
+// }
 
 // Draw the game over screen
 func (r *Renderer) drawGameOver(screen *ebiten.Image, winner string) {
