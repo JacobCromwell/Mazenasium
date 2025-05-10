@@ -4,17 +4,17 @@ package state
 import (
 	"fmt"
 	"image/color"
-	"math/rand"
+	//"math/rand" // skipping trivia for now
 
 	"github.com/JacobCromwell/Mazenasium/internal/game/action"
 	"github.com/JacobCromwell/Mazenasium/internal/game/flavor"
 	"github.com/JacobCromwell/Mazenasium/internal/game/maze"
+	"github.com/JacobCromwell/Mazenasium/internal/game/menu"
 	"github.com/JacobCromwell/Mazenasium/internal/game/npc"
 	"github.com/JacobCromwell/Mazenasium/internal/game/player"
 	"github.com/JacobCromwell/Mazenasium/internal/game/trivia"
 	"github.com/JacobCromwell/Mazenasium/internal/game/turn"
 	"github.com/JacobCromwell/Mazenasium/internal/game/ui"
-	"github.com/JacobCromwell/Mazenasium/internal/game/menu"
 )
 
 // GameState represents the current state of the game
@@ -48,74 +48,74 @@ type Manager struct {
 }
 
 func New(screenWidth, screenHeight int) *Manager {
-    // Increased base size for the maze - will be doubled in maze.New
-    mazeWidth := 10
-    mazeHeight := 10
+	// Increased base size for the maze - will be doubled in maze.New
+	mazeWidth := 10
+	mazeHeight := 10
 
-    manager := &Manager{
-        CurrentState:     Menu, // Start with Menu state
-        TurnManager:      turn.NewManager(),
-        Player:           player.New(1, 1, maze.TileSize),
-        NPCManager:       npc.NewManager(),
-        Maze:             maze.New(mazeWidth, mazeHeight, 0, 0),
-        TriviaMgr:        trivia.NewManager(),
-        ActionMgr:        action.NewManager(),
-        MenuMgr:          menu.NewManager(), // Initialize menu manager
-        UIRenderer:       ui.NewRenderer(),
-        InputHandler:     ui.NewInputHandler(),
-        Winner:           "",
-        xRotateActive:    false,
-        xRotateDirection: 0,
-    }
+	manager := &Manager{
+		CurrentState:     Menu, // Start with Menu state
+		TurnManager:      turn.NewManager(),
+		Player:           player.New(1, 1, maze.TileSize),
+		NPCManager:       npc.NewManager(),
+		Maze:             maze.New(mazeWidth, mazeHeight, 0, 0),
+		TriviaMgr:        trivia.NewManager(),
+		ActionMgr:        action.NewManager(),
+		MenuMgr:          menu.NewManager(), // Initialize menu manager
+		UIRenderer:       ui.NewRenderer(),
+		InputHandler:     ui.NewInputHandler(),
+		Winner:           "",
+		xRotateActive:    false,
+		xRotateDirection: 0,
+	}
 
-    // Create NPCs
-    npc1 := npc.New(0, 3, 3, maze.TileSize, color.RGBA{255, 0, 0, 255})
-    npc2 := npc.New(1, 5, 5, maze.TileSize, color.RGBA{0, 255, 0, 255})
+	// Create NPCs
+	npc1 := npc.New(0, 3, 3, maze.TileSize, color.RGBA{255, 0, 0, 255})
+	npc2 := npc.New(1, 5, 5, maze.TileSize, color.RGBA{0, 255, 0, 255})
 
-    // Add NPCs to manager
-    manager.NPCManager.AddNPC(npc1)
-    manager.NPCManager.AddNPC(npc2)
+	// Add NPCs to manager
+	manager.NPCManager.AddNPC(npc1)
+	manager.NPCManager.AddNPC(npc2)
 
-    return manager
+	return manager
 }
 
 // Update the Update method to handle menu state
 func (m *Manager) Update() {
-    switch m.CurrentState {
-    case Menu:
-        m.updateMenu()
-    case Playing:
-        m.updatePlaying()
-    case AnsweringTrivia:
-        m.updateTrivia()
-    case GameOver:
-        if m.InputHandler.CheckRestartKey() {
-            // Reset game
-            *m = *New(ui.ScreenWidth, ui.ScreenHeight)
-        }
-    }
+	switch m.CurrentState {
+	case Menu:
+		m.updateMenu()
+	case Playing:
+		m.updatePlaying()
+	case AnsweringTrivia:
+		m.updateTrivia()
+	case GameOver:
+		if m.InputHandler.CheckRestartKey() {
+			// Reset game
+			*m = *New(ui.ScreenWidth, ui.ScreenHeight)
+		}
+	}
 
-    // Update action message timer in the UI renderer
-    m.UIRenderer.UpdateActionTimer()
+	// Update action message timer in the UI renderer
+	m.UIRenderer.UpdateActionTimer()
 
-    // Update action cooldowns
-    m.ActionMgr.UpdateCooldowns()
+	// Update action cooldowns
+	m.ActionMgr.UpdateCooldowns()
 }
 
 // Add the updateMenu method
 func (m *Manager) updateMenu() {
-    action := m.MenuMgr.HandleInput()
-    
-    if action == "start_game" {
-        // Start the game
-        m.CurrentState = Playing
-    } else if action == "quit" {
-        // Quit the game
-        // In a real implementation, you'd handle this differently
-        // For now, we'll just switch to game over state
-        m.Winner = "Quit"
-        m.CurrentState = GameOver
-    }
+	action := m.MenuMgr.HandleInput()
+
+	if action == "start_game" {
+		// Start the game
+		m.CurrentState = Playing
+	} else if action == "quit" {
+		// Quit the game
+		// In a real implementation, you'd handle this differently
+		// For now, we'll just switch to game over state
+		m.Winner = "Quit"
+		m.CurrentState = GameOver
+	}
 }
 
 // Update while playing
@@ -300,12 +300,16 @@ func (m *Manager) updatePositions() {
 			return
 		}
 
-		// If this was a player move, show trivia
+		// DEBUGGING: Skip trivia and go directly to action phase
 		if m.TurnManager.IsPlayerTurn() && m.TurnManager.CurrentState == turn.WaitingForMove {
-			m.CurrentState = AnsweringTrivia
-			m.TurnManager.NextState(turn.WaitingForTrivia)
-			m.TriviaMgr.Answered = false
-			m.TriviaMgr.SetRandomQuestion(rand.Intn)
+			// Comment out the trivia part
+			// m.CurrentState = AnsweringTrivia
+			// m.TurnManager.NextState(turn.WaitingForTrivia)
+			// m.TriviaMgr.Answered = false
+			// m.TriviaMgr.SetRandomQuestion(rand.Intn)
+
+			// Instead, go directly to waiting for action
+			m.TurnManager.NextState(turn.WaitingForAction)
 		}
 	}
 

@@ -66,7 +66,7 @@ func (r *Renderer) drawMenu(screen *ebiten.Image, menuManager *menu.Manager) {
     
     // Draw menu title
     titleX := ScreenWidth/2 - len(currentMenu.Title)*4
-    ebitenutil.DebugPrintAt(screen, currentMenu.Title, titleX, 120)
+    DrawText(screen, currentMenu.Title, titleX, 120)
     
     // Draw menu items
     for i, item := range currentMenu.Items {
@@ -80,14 +80,14 @@ func (r *Renderer) drawMenu(screen *ebiten.Image, menuManager *menu.Manager) {
         
         // Draw selection indicator for selected item
         if item.Selected {
-            ebitenutil.DebugPrintAt(screen, "> " + itemText, ScreenWidth/2 - 100, itemY)
+            DrawText(screen, "> " + itemText, ScreenWidth/2 - 100, itemY)
         } else {
-            ebitenutil.DebugPrintAt(screen, "  " + itemText, ScreenWidth/2 - 100, itemY)
+            DrawText(screen, "  " + itemText, ScreenWidth/2 - 100, itemY)
         }
     }
     
     // Draw instructions
-    ebitenutil.DebugPrintAt(screen, "↑/↓: Navigate, Enter: Select", ScreenWidth/2 - 120, ScreenHeight - 150)
+    DrawText(screen, "↑/↓: Navigate, Enter: Select", ScreenWidth/2 - 120, ScreenHeight - 150)
 }
 
 // Update the Draw method to include the menu state
@@ -150,8 +150,8 @@ func (r *Renderer) drawGameOver(screen *ebiten.Image, winner string) {
 	
 	// Draw winner message
 	winMessage := fmt.Sprintf("%s reached the goal first and won!", winner)
-	ebitenutil.DebugPrintAt(screen, winMessage, ScreenWidth/2-120, ScreenHeight/2-10)
-	ebitenutil.DebugPrintAt(screen, "Press SPACE to restart", ScreenWidth/2-100, ScreenHeight/2+20)
+	DrawText(screen, winMessage, ScreenWidth/2-120, ScreenHeight/2-10)
+	DrawText(screen, "Press SPACE to restart", ScreenWidth/2-100, ScreenHeight/2+20)
 }
 
 // Draw the playing state
@@ -186,27 +186,27 @@ func (r *Renderer) drawPlaying(
 	// Draw action message if active
 	if r.actionMsg != "" {
 		// Calculate message width for centering
-		msgWidth := len(r.actionMsg) * 7 // Approximate width based on character count
+		msgWidth := len(r.actionMsg) * 14 // Approximate width based on character count
 		
 		// Draw a background rectangle for the message
 		msgBgX := ScreenWidth/2 - msgWidth/2 - 10
 		msgBgWidth := msgWidth + 20
 		
 		ebitenutil.DrawRect(screen, float64(msgBgX), ScreenHeight-60, float64(msgBgWidth), 30, color.RGBA{0, 0, 0, 180})
-		ebitenutil.DebugPrintAt(screen, r.actionMsg, ScreenWidth/2-msgWidth/2, ScreenHeight-50)
+		DrawText(screen, r.actionMsg, ScreenWidth/2-msgWidth/2, ScreenHeight-50)
 	}
 }
 
 // Draw the UI
 func (r *Renderer) drawUI(screen *ebiten.Image, turnManager *turn.Manager) {
 	// Draw turn info using the turn manager
-	ebitenutil.DebugPrintAt(screen, turnManager.OwnerText(), 10, 10)
+	DrawText(screen, turnManager.OwnerText(), 10, 10)
 
 	// Draw turn state info using the turn manager
-	ebitenutil.DebugPrintAt(screen, turnManager.StateText(), 10, 30)
+	DrawText(screen, turnManager.StateText(), 10, 30)
 
 	// Draw goal info
-	ebitenutil.DebugPrintAt(screen, "Reach the purple goal to win!", 10, 50)
+	DrawText(screen, "Reach the purple goal to win!", 10, 50)
 }
 
 // Draw the action selection popup
@@ -244,11 +244,11 @@ func (r *Renderer) drawActionPopup(screen *ebiten.Image, actionManager *action.M
 	
 	// Draw action list
 	for i, line := range lines {
-		ebitenutil.DebugPrintAt(screen, line, x+10, y+20+(i*20))
+		DrawText(screen, line, x+10, y+20+(i*20))
 	}
 	
 	// Draw instructions at the bottom
-	ebitenutil.DebugPrintAt(screen, "Press number to select, ESC to cancel", x+10, y+height-20)
+	DrawText(screen, "Press number to select, ESC to cancel", x+10, y+height-20)
 }
 
 // Draw the trivia screen
@@ -259,16 +259,16 @@ func (r *Renderer) drawTrivia(screen *ebiten.Image, triviaManager *trivia.Manage
 	ebitenutil.DrawRect(screen, 50, 50, ScreenWidth-100, ScreenHeight-100, color.RGBA{50, 50, 80, 240})
 
 	// Draw question
-	ebitenutil.DebugPrintAt(screen, currentQuestion.Question, 70, 70)
+	DrawText(screen, currentQuestion.Question, 70, 70)
 
 	// Draw options
 	for i, option := range currentQuestion.Options {
-		optionYpadding := 30 * i
-		ebitenutil.DebugPrintAt(screen, fmt.Sprintf("%d: %s", i+1, option), 70, (140 + optionYpadding))
+		optionYpadding := 60 * i
+		DrawText(screen, fmt.Sprintf("%d: %s", i+1, option), 70, (140 + optionYpadding))
 	}
 
 	// Draw instructions
-	ebitenutil.DebugPrintAt(screen, "Press 1-4 to answer", 70, ScreenHeight-100)
+	DrawText(screen, "Press 1-4 to answer", 70, ScreenHeight-100)
 
 	// If answered, show result
 	if triviaManager.Answered {
@@ -283,6 +283,6 @@ func (r *Renderer) drawTrivia(screen *ebiten.Image, triviaManager *trivia.Manage
 		// Calculate message width for centering
 		msgWidth := len(resultText) * 9 // Approximate width based on character count
 		
-		ebitenutil.DebugPrintAt(screen, resultText, ScreenWidth/2-msgWidth/2, ScreenHeight/2)
+		DrawText(screen, resultText, ScreenWidth/2-msgWidth/2, ScreenHeight/2)
 	}
 }
