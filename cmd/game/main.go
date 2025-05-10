@@ -29,17 +29,18 @@ func (g *Game) Update() error {
 
 // Draw the game - delegates to UI renderer
 func (g *Game) Draw(screen *ebiten.Image) {
-	g.stateManager.UIRenderer.Draw(
-		screen,
-		int(g.stateManager.CurrentState),
-		g.stateManager.Maze,
-		g.stateManager.Player,
-		g.stateManager.NPCManager,
-		g.stateManager.TurnManager,
-		g.stateManager.TriviaMgr,
-		g.stateManager.ActionMgr, // Add ActionMgr parameter
-		g.stateManager.Winner,
-	)
+    g.stateManager.UIRenderer.Draw(
+        screen,
+        int(g.stateManager.CurrentState),
+        g.stateManager.Maze,
+        g.stateManager.Player,
+        g.stateManager.NPCManager,
+        g.stateManager.TurnManager,
+        g.stateManager.TriviaMgr,
+        g.stateManager.ActionMgr,
+        g.stateManager.MenuMgr,
+        g.stateManager.Winner,
+    )
 }
 
 // Layout implements ebiten.Game's Layout

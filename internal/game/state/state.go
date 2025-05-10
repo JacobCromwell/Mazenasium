@@ -7,19 +7,22 @@ import (
 	"math/rand"
 
 	"github.com/JacobCromwell/Mazenasium/internal/game/action"
+	"github.com/JacobCromwell/Mazenasium/internal/game/flavor"
 	"github.com/JacobCromwell/Mazenasium/internal/game/maze"
 	"github.com/JacobCromwell/Mazenasium/internal/game/npc"
 	"github.com/JacobCromwell/Mazenasium/internal/game/player"
 	"github.com/JacobCromwell/Mazenasium/internal/game/trivia"
 	"github.com/JacobCromwell/Mazenasium/internal/game/turn"
 	"github.com/JacobCromwell/Mazenasium/internal/game/ui"
+	"github.com/JacobCromwell/Mazenasium/internal/game/menu"
 )
 
 // GameState represents the current state of the game
 type GameState int
 
 const (
-	Playing GameState = iota
+	Menu GameState = iota
+	Playing
 	AnsweringTrivia
 	GameOver
 )
@@ -32,9 +35,11 @@ type Manager struct {
 	NPCManager   *npc.Manager
 	Maze         *maze.Maze
 	TriviaMgr    *trivia.Manager
-	ActionMgr    *action.Manager // Added ActionManager
+	ActionMgr    *action.Manager
+	MenuMgr      *menu.Manager
 	UIRenderer   *ui.Renderer
 	InputHandler *ui.InputHandler
+	Flavor       *flavor.Manager
 	Winner       string
 
 	// fields for xRotateAction
@@ -42,57 +47,75 @@ type Manager struct {
 	xRotateDirection int  // 1 for right, -1 for left
 }
 
-// New creates a new game state manager
 func New(screenWidth, screenHeight int) *Manager {
-	// Increased base size for the maze - will be doubled in maze.New
-	mazeWidth := 10
-	mazeHeight := 10
+    // Increased base size for the maze - will be doubled in maze.New
+    mazeWidth := 10
+    mazeHeight := 10
 
-	manager := &Manager{
-		CurrentState:     Playing,
-		TurnManager:      turn.NewManager(),
-		Player:           player.New(1, 1, maze.TileSize),
-		NPCManager:       npc.NewManager(),
-		Maze:             maze.New(mazeWidth, mazeHeight, 0, 0), // Let maze fill the screen
-		TriviaMgr:        trivia.NewManager(),
-		ActionMgr:        action.NewManager(), // Initialize Action Manager
-		UIRenderer:       ui.NewRenderer(),
-		InputHandler:     ui.NewInputHandler(),
-		Winner:           "",
-		xRotateActive:    false,
-		xRotateDirection: 0,
-	}
+    manager := &Manager{
+        CurrentState:     Menu, // Start with Menu state
+        TurnManager:      turn.NewManager(),
+        Player:           player.New(1, 1, maze.TileSize),
+        NPCManager:       npc.NewManager(),
+        Maze:             maze.New(mazeWidth, mazeHeight, 0, 0),
+        TriviaMgr:        trivia.NewManager(),
+        ActionMgr:        action.NewManager(),
+        MenuMgr:          menu.NewManager(), // Initialize menu manager
+        UIRenderer:       ui.NewRenderer(),
+        InputHandler:     ui.NewInputHandler(),
+        Winner:           "",
+        xRotateActive:    false,
+        xRotateDirection: 0,
+    }
 
-	// Create NPCs
-	npc1 := npc.New(0, 3, 3, maze.TileSize, color.RGBA{255, 0, 0, 255})
-	npc2 := npc.New(1, 5, 5, maze.TileSize, color.RGBA{0, 255, 0, 255})
+    // Create NPCs
+    npc1 := npc.New(0, 3, 3, maze.TileSize, color.RGBA{255, 0, 0, 255})
+    npc2 := npc.New(1, 5, 5, maze.TileSize, color.RGBA{0, 255, 0, 255})
 
-	// Add NPCs to manager
-	manager.NPCManager.AddNPC(npc1)
-	manager.NPCManager.AddNPC(npc2)
+    // Add NPCs to manager
+    manager.NPCManager.AddNPC(npc1)
+    manager.NPCManager.AddNPC(npc2)
 
-	return manager
+    return manager
 }
 
-// Update updates the game state
+// Update the Update method to handle menu state
 func (m *Manager) Update() {
-	switch m.CurrentState {
-	case Playing:
-		m.updatePlaying()
-	case AnsweringTrivia:
-		m.updateTrivia()
-	case GameOver:
-		if m.InputHandler.CheckRestartKey() {
-			// Reset game
-			*m = *New(ui.ScreenWidth, ui.ScreenHeight)
-		}
-	}
+    switch m.CurrentState {
+    case Menu:
+        m.updateMenu()
+    case Playing:
+        m.updatePlaying()
+    case AnsweringTrivia:
+        m.updateTrivia()
+    case GameOver:
+        if m.InputHandler.CheckRestartKey() {
+            // Reset game
+            *m = *New(ui.ScreenWidth, ui.ScreenHeight)
+        }
+    }
 
-	// Update action message timer in the UI renderer
-	m.UIRenderer.UpdateActionTimer()
+    // Update action message timer in the UI renderer
+    m.UIRenderer.UpdateActionTimer()
 
-	// Update action cooldowns
-	m.ActionMgr.UpdateCooldowns()
+    // Update action cooldowns
+    m.ActionMgr.UpdateCooldowns()
+}
+
+// Add the updateMenu method
+func (m *Manager) updateMenu() {
+    action := m.MenuMgr.HandleInput()
+    
+    if action == "start_game" {
+        // Start the game
+        m.CurrentState = Playing
+    } else if action == "quit" {
+        // Quit the game
+        // In a real implementation, you'd handle this differently
+        // For now, we'll just switch to game over state
+        m.Winner = "Quit"
+        m.CurrentState = GameOver
+    }
 }
 
 // Update while playing
@@ -169,16 +192,16 @@ func (m *Manager) updatePlaying() {
 // Add this method to the Manager struct to collect entity positions
 func (m *Manager) collectEntityPositions() []maze.Position {
 	positions := []maze.Position{}
-	
+
 	// Add player position
 	playerGridX, playerGridY := m.Player.GetGridPosition()
 	positions = append(positions, maze.Position{X: playerGridX, Y: playerGridY})
-	
+
 	// Add NPC positions
 	for _, npc := range m.NPCManager.NPCs {
 		positions = append(positions, maze.Position{X: npc.GridX, Y: npc.GridY})
 	}
-	
+
 	return positions
 }
 
@@ -187,18 +210,18 @@ func (m *Manager) handleXRotateConfirmation() {
 	// Check for confirmation
 	if m.InputHandler.CheckConfirmKey() {
 		playerGridX, playerGridY := m.Player.GetGridPosition()
-		
+
 		// Collect all entity positions
 		entityPositions := m.collectEntityPositions()
-		
+
 		// Check for collisions
 		hasCollision := m.Maze.CheckXRotateCollisions(
-			playerGridX, 
-			playerGridY, 
-			m.xRotateDirection, 
+			playerGridX,
+			playerGridY,
+			m.xRotateDirection,
 			entityPositions,
 		)
-		
+
 		if hasCollision {
 			// Cancel the action due to collision
 			m.Maze.ClearHighlights()
@@ -244,16 +267,16 @@ func (m *Manager) handleActionSelection(selectedAction action.Action) {
 		m.xRotateActive = true
 		m.xRotateDirection = -1
 		m.UIRenderer.SetActionMessage("X-Rotate Left? (Confirm: Enter, Cancel: Esc)", 0) // 0 for no timeout
-		
+
 	case action.XRotateRight:
 		playerGridX, playerGridY := m.Player.GetGridPosition()
 		m.Maze.HighlightXRotation(playerGridX, playerGridY)
 		m.xRotateActive = true
 		m.xRotateDirection = 1
 		m.UIRenderer.SetActionMessage("X-Rotate Right? (Confirm: Enter, Cancel: Esc)", 0)
-		
+
 	// Add more cases for future actions
-	
+
 	default:
 		m.UIRenderer.SetActionMessage("Unknown action selected", 60)
 		m.TurnManager.NextState(turn.WaitingForAction)
@@ -267,6 +290,9 @@ func (m *Manager) updatePositions() {
 
 	// Update player, and check if they've arrived at destination
 	if arrived := m.Player.Update(5.0); arrived {
+
+		//m.FlavorManager.UpdateImage(playerGridX, playerGridY)
+
 		// Check if player reached the goal
 		if m.Maze.IsGoal(playerGridX, playerGridY) {
 			m.Winner = "Player"
