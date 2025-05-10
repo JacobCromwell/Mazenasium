@@ -52,6 +52,8 @@ func New(screenWidth, screenHeight int) *Manager {
 	mazeWidth := 10
 	mazeHeight := 10
 
+	//flavorMgr := flavor.NewManager()
+
 	manager := &Manager{
 		CurrentState:     Menu, // Start with Menu state
 		TurnManager:      turn.NewManager(),
@@ -75,6 +77,11 @@ func New(screenWidth, screenHeight int) *Manager {
 	// Add NPCs to manager
 	manager.NPCManager.AddNPC(npc1)
 	manager.NPCManager.AddNPC(npc2)
+
+	err := manager.Flavor.LoadImages("assets")
+    if err != nil {
+        fmt.Printf("Warning: Failed to load flavor images: %v\n", err)
+    }
 
 	return manager
 }
@@ -292,6 +299,10 @@ func (m *Manager) updatePositions() {
 	if arrived := m.Player.Update(5.0); arrived {
 
 		//m.FlavorManager.UpdateImage(playerGridX, playerGridY)
+		if m.Flavor != nil {
+            m.Flavor.UpdateImage(playerGridX, playerGridY)
+        }
+        
 
 		// Check if player reached the goal
 		if m.Maze.IsGoal(playerGridX, playerGridY) {

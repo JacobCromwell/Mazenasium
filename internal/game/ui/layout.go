@@ -25,11 +25,11 @@ type LayoutManager struct {
 }
 
 func NewLayoutManager(screenWidth, screenHeight int) *LayoutManager {
-    // Default to a horizontal split
+    // Updated to put maze on the left and flavor image on the right
     mazeSection := Section{
         Type: MazeSection,
         Rect: Rect{
-            X: 0,
+            X: screenWidth / 2, // Left side of the screen
             Y: 0,
             Width: screenWidth / 2,
             Height: screenHeight,
@@ -41,7 +41,7 @@ func NewLayoutManager(screenWidth, screenHeight int) *LayoutManager {
     flavorSection := Section{
         Type: FlavorSection,
         Rect: Rect{
-            X: screenWidth / 2,
+            X: 0, // Right side of screen
             Y: 0,
             Width: screenWidth - (screenWidth / 2),
             Height: screenHeight,
