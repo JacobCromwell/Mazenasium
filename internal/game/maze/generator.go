@@ -1,6 +1,7 @@
 package maze
 
 import (
+	"fmt"
     "math/rand"
 )
 
@@ -243,10 +244,7 @@ func (g *Generator) hasPath(state *State, startX, startY, goalX, goalY int) bool
 
 // setFlavorImages assigns flavor images to tiles
 func (g *Generator) setFlavorImages(state *State) {
-    // This would assign specific flavor images to tiles based on rules
-    // For example, different images for different parts of the maze
-    
-    // Simple placeholder implementation - in reality, you'd have more complex rules
+    // Assign flavor images to non-wall tiles based on their ID
     for y := 0; y < state.Height; y++ {
         for x := 0; x < state.Width; x++ {
             tile := state.GetTile(x, y)
@@ -254,15 +252,24 @@ func (g *Generator) setFlavorImages(state *State) {
                 continue
             }
             
-            switch tile.Type {
-            case Floor:
-                // Assign a floor flavor image - could be based on position or other factors
-                tile.SetFlavorImage("assets/floor.jpg")
-            case Goal:
-                tile.SetFlavorImage("assets/goal.jpg")
-            case Wall:
-                tile.SetFlavorImage("assets/wall.jpg")
+            // Skip walls - they don't get flavor images
+            if tile.Type == Wall {
+                continue
             }
+            
+            // Assign flavor image based on tile ID
+            // Format: assets/hallway/{id}.jpg
+            //imagePath := fmt.Sprintf("assets/hallway/%d.jpg", tile.ID)
+
+			if((tile.ID % 2) == 0){
+				imagePath := fmt.Sprintf("assets/hallway/1.jpg")	
+				tile.SetFlavorImage(imagePath)
+			} else {
+				imagePath := fmt.Sprintf("assets/hallway/2.jpg")
+				tile.SetFlavorImage(imagePath)
+			}
+
+            //tile.SetFlavorImage(imagePath)
         }
     }
 }

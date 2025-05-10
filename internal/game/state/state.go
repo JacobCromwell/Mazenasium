@@ -47,43 +47,60 @@ type Manager struct {
 	xRotateDirection int  // 1 for right, -1 for left
 }
 
+// In internal/game/state/state.go
+// Update the New function to ensure proper initialization of the Flavor manager
+
 func New(screenWidth, screenHeight int) *Manager {
-	// Increased base size for the maze - will be doubled in maze.New
-	mazeWidth := 10
-	mazeHeight := 10
+    // Increased base size for the maze - will be doubled in maze.New
+    mazeWidth := 10
+    mazeHeight := 10
 
-	//flavorMgr := flavor.NewManager()
-
-	manager := &Manager{
-		CurrentState:     Menu, // Start with Menu state
-		TurnManager:      turn.NewManager(),
-		Player:           player.New(1, 1, maze.TileSize),
-		NPCManager:       npc.NewManager(),
-		Maze:             maze.New(mazeWidth, mazeHeight, 0, 0),
-		TriviaMgr:        trivia.NewManager(),
-		ActionMgr:        action.NewManager(),
-		MenuMgr:          menu.NewManager(), // Initialize menu manager
-		UIRenderer:       ui.NewRenderer(),
-		InputHandler:     ui.NewInputHandler(),
-		Winner:           "",
-		xRotateActive:    false,
-		xRotateDirection: 0,
-	}
-
-	// Create NPCs
-	npc1 := npc.New(0, 3, 3, maze.TileSize, color.RGBA{255, 0, 0, 255})
-	npc2 := npc.New(1, 5, 5, maze.TileSize, color.RGBA{0, 255, 0, 255})
-
-	// Add NPCs to manager
-	manager.NPCManager.AddNPC(npc1)
-	manager.NPCManager.AddNPC(npc2)
-
-	err := manager.Flavor.LoadImages("assets")
-    if err != nil {
-        fmt.Printf("Warning: Failed to load flavor images: %v\n", err)
+    // Create and initialize the flavor manager first
+    flavorMgr := flavor.NewManager()
+    
+    manager := &Manager{
+        CurrentState:     Menu, // Start with Menu state
+        TurnManager:      turn.NewManager(),
+        Player:           player.New(1, 1, maze.TileSize),
+        NPCManager:       npc.NewManager(),
+        Maze:             maze.New(mazeWidth, mazeHeight, 0, 0),
+        TriviaMgr:        trivia.NewManager(),
+        ActionMgr:        action.NewManager(),
+        MenuMgr:          menu.NewManager(), // Initialize menu manager
+        UIRenderer:       ui.NewRenderer(),
+        InputHandler:     ui.NewInputHandler(),
+        Flavor:           flavorMgr, // Make sure this is set
+        Winner:           "",
+        xRotateActive:    false,
+        xRotateDirection: 0,
     }
 
-	return manager
+    // Create NPCs
+    npc1 := npc.New(0, 3, 3, maze.TileSize, color.RGBA{255, 0, 0, 255})
+    npc2 := npc.New(1, 5, 5, maze.TileSize, color.RGBA{0, 255, 0, 255})
+
+    // Add NPCs to manager
+    manager.NPCManager.AddNPC(npc1)
+    manager.NPCManager.AddNPC(npc2)
+
+    // Try to load flavor images after initializing the manager
+    if flavorMgr != nil {
+        // Use a try/catch pattern to prevent crash if image loading fails
+        func() {
+            defer func() {
+                if r := recover(); r != nil {
+                    fmt.Println("Warning: Error while loading flavor images:", r)
+                }
+            }()
+            
+            err := flavorMgr.LoadImages("assets")
+            if err != nil {
+                fmt.Println("Warning: Failed to load flavor images:", err)
+            }
+        }()
+    }
+
+    return manager
 }
 
 // Update the Update method to handle menu state
@@ -298,10 +315,19 @@ func (m *Manager) updatePositions() {
 	// Update player, and check if they've arrived at destination
 	if arrived := m.Player.Update(5.0); arrived {
 
-		//m.FlavorManager.UpdateImage(playerGridX, playerGridY)
 		if m.Flavor != nil {
-            m.Flavor.UpdateImage(playerGridX, playerGridY)
-        }
+			playerGridX, playerGridY := m.Player.GetGridPosition()
+			tile := m.Maze.State.GetTile(playerGridX, playerGridY)
+			
+			if tile != nil && tile.Type != maze.Wall {
+				// Get the flavor image path from the tile
+				imagePath := tile.GetFlavorImage()
+				if imagePath != "" {
+					// Update the flavor image based on the tile's assigned image
+					m.Flavor.SetImageByPath(imagePath)
+				}
+			}
+		}
         
 
 		// Check if player reached the goal
