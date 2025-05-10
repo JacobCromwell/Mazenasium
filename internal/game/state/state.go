@@ -191,45 +191,45 @@ func (m *Manager) updatePlaying() {
 
 // Add this method to the Manager struct to collect entity positions
 func (m *Manager) collectEntityPositions() []maze.Position {
-	positions := []maze.Position{}
-
-	// Add player position
-	playerGridX, playerGridY := m.Player.GetGridPosition()
-	positions = append(positions, maze.Position{X: playerGridX, Y: playerGridY})
-
-	// Add NPC positions
-	for _, npc := range m.NPCManager.NPCs {
-		positions = append(positions, maze.Position{X: npc.GridX, Y: npc.GridY})
-	}
-
-	return positions
+    positions := []maze.Position{}
+    
+    // Add player position
+    playerGridX, playerGridY := m.Player.GetGridPosition()
+    positions = append(positions, maze.Position{X: playerGridX, Y: playerGridY})
+    
+    // Add NPC positions
+    for _, npc := range m.NPCManager.NPCs {
+        positions = append(positions, maze.Position{X: npc.GridX, Y: npc.GridY})
+    }
+    
+    return positions
 }
 
 // Modify the handleXRotateConfirmation method to check for collisions
 func (m *Manager) handleXRotateConfirmation() {
-	// Check for confirmation
-	if m.InputHandler.CheckConfirmKey() {
-		playerGridX, playerGridY := m.Player.GetGridPosition()
-
-		// Collect all entity positions
-		entityPositions := m.collectEntityPositions()
-
-		// Check for collisions
-		hasCollision := m.Maze.CheckXRotateCollisions(
-			playerGridX,
-			playerGridY,
-			m.xRotateDirection,
-			entityPositions,
-		)
-
-		if hasCollision {
-			// Cancel the action due to collision
-			m.Maze.ClearHighlights()
-			m.xRotateActive = false
-			m.UIRenderer.SetActionMessage("Cannot move wall segments on top of players or NPCs", 120)
-			m.TurnManager.NextState(turn.WaitingForAction)
-			return
-		}
+    // Check for confirmation
+    if m.InputHandler.CheckConfirmKey() {
+        playerGridX, playerGridY := m.Player.GetGridPosition()
+        
+        // Collect all entity positions
+        entityPositions := m.collectEntityPositions()
+        
+        // Check for collisions
+        hasCollision := m.Maze.CheckXRotateCollisions(
+            playerGridX,
+            playerGridY,
+            m.xRotateDirection,
+            entityPositions,
+        )
+        
+        if hasCollision {
+            // Cancel the action due to collision
+            m.Maze.ClearHighlights()
+            m.xRotateActive = false
+            m.UIRenderer.SetActionMessage("Cannot move wall segments on top of players or NPCs", 120)
+            m.TurnManager.NextState(turn.WaitingForAction)
+            return
+        }
 
 		// No collision, perform the rotation
 		m.Maze.PerformXRotate(playerGridX, playerGridY, m.xRotateDirection)
