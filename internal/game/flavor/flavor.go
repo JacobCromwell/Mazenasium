@@ -2,6 +2,7 @@
 package flavor
 
 import (
+	"fmt"
     "image"
     _ "image/jpeg" // Register JPEG decoder
     "os"
@@ -25,47 +26,44 @@ func NewManager() *Manager {
     }
 }
 
+// Update internal/game/flavor/flavor.go
 func (m *Manager) LoadImages(assetsDir string) error {
-    // Load all JPG images from the assets directory
-    entries, err := os.ReadDir(assetsDir)
-    if err != nil {
-        return err
+    // Safety check
+    if m == nil {
+        return fmt.Errorf("flavor manager is nil")
     }
+
+    // Ensure the assets directory exists
+    if _, err := os.Stat(assetsDir); os.IsNotExist(err) {
+        return fmt.Errorf("assets directory does not exist: %v", err)
+    }
+
+    // Look for images in the hallway subdirectory
+    hallwayDir := filepath.Join(assetsDir, "hallway")
     
-    for _, entry := range entries {
-        if !entry.IsDir() && (filepath.Ext(entry.Name()) == ".jpg" || filepath.Ext(entry.Name()) == ".jpeg") {
-            path := filepath.Join(assetsDir, entry.Name())
-            
-            // Load image file
-            file, err := os.Open(path)
-            if err != nil {
-                continue
-            }
-            defer file.Close()
-            
-            // Decode image
-            img, _, err := image.Decode(file)
-            if err != nil {
-                continue
-            }
-            
-            // Convert to ebiten image
-            ebitenImg := ebiten.NewImageFromImage(img)
-            
-            // Store image with key (filename without extension)
-            key := filepath.Base(entry.Name())
-            key = key[:len(key)-len(filepath.Ext(key))]
-            m.Images[key] = ebitenImg
-            m.ImageKeys = append(m.ImageKeys, key)
+    // Create the directory if it doesn't exist
+    if _, err := os.Stat(hallwayDir); os.IsNotExist(err) {
+        fmt.Println("Creating hallway directory:", hallwayDir)
+        if err := os.MkdirAll(hallwayDir, 0755); err != nil {
+            return fmt.Errorf("failed to create hallway directory: %v", err)
         }
+        
+        // Return early since the directory is empty
+        fmt.Println("Hallway directory is empty, no images to load")
+        return nil
     }
     
-    // Set initial image if available
-    if len(m.ImageKeys) > 0 {
-        m.CurrentImage = m.Images[m.ImageKeys[0]]
+    // Initialize maps if they haven't been already
+    if m.Images == nil {
+        m.Images = make(map[string]*ebiten.Image)
     }
     
-    return nil
+    if m.ImageKeys == nil {
+        m.ImageKeys = make([]string, 0)
+    }
+    
+	return nil
+    // Rest of the method...
 }
 
 func (m *Manager) UpdateImage(playerX, playerY int) {
@@ -110,4 +108,43 @@ func (m *Manager) Draw(screen *ebiten.Image, x, y, width, height int) {
     op.GeoM.Translate(float64(centeredX), float64(centeredY))
     
     screen.DrawImage(m.CurrentImage, op)
+}
+
+// Update in internal/game/flavor/flavor.go
+func (m *Manager) SetImageByPath(path string) {
+    // Safety check
+    if m == nil || m.Images == nil {
+        fmt.Println("Warning: Flavor manager or images map is nil")
+        return
+    }
+    
+    // Check if the image is already loaded
+    img, exists := m.Images[path]
+    if exists {
+        m.CurrentImage = img
+        return
+    }
+    
+    // If the image isn't loaded yet, try to load it
+    file, err := os.Open(path)
+    if err != nil {
+        fmt.Printf("Warning: Could not open image %s: %v\n", path, err)
+        return
+    }
+    defer file.Close()
+    
+    // Decode image
+    decodedImg, _, err := image.Decode(file)
+    if err != nil {
+        fmt.Printf("Warning: Could not decode image %s: %v\n", path, err)
+        return
+    }
+    
+    // Convert to ebiten image
+    ebitenImg := ebiten.NewImageFromImage(decodedImg)
+    
+    // Store image and set as current
+    m.Images[path] = ebitenImg
+    m.ImageKeys = append(m.ImageKeys, path)
+    m.CurrentImage = ebitenImg
 }

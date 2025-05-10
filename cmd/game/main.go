@@ -39,6 +39,7 @@ func (g *Game) Draw(screen *ebiten.Image) {
         g.stateManager.TriviaMgr,
         g.stateManager.ActionMgr,
         g.stateManager.MenuMgr,
+		g.stateManager.Flavor,
         g.stateManager.Winner,
     )
 }

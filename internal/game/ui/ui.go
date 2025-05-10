@@ -14,13 +14,13 @@ import (
 	"github.com/JacobCromwell/Mazenasium/internal/game/player"
 	"github.com/JacobCromwell/Mazenasium/internal/game/trivia"
 	"github.com/JacobCromwell/Mazenasium/internal/game/turn"
-	//"github.com/JacobCromwell/Mazenasium/internal/game/flavor"
+	"github.com/JacobCromwell/Mazenasium/internal/game/flavor"
 	"github.com/JacobCromwell/Mazenasium/internal/game/menu"
 )
 
 const (
-	ScreenWidth  = 800
-	ScreenHeight = 600
+	ScreenWidth  = 1200
+	ScreenHeight = 1000
 )
 
 // Renderer handles all UI rendering for the game
@@ -100,7 +100,8 @@ func (r *Renderer) Draw(
     turnManager *turn.Manager,
     triviaManager *trivia.Manager,
     actionManager *action.Manager,
-    menuManager *menu.Manager, // Add menu manager
+    menuManager *menu.Manager,
+    flavorManager *flavor.Manager, // Add flavor manager
     winner string,
 ) {
     // Draw background
@@ -110,7 +111,7 @@ func (r *Renderer) Draw(
     case 0: // Menu
         r.drawMenu(screen, menuManager)
     case 1: // Playing
-        r.drawPlaying(screen, mazeObj, playerObj, npcManager, turnManager, actionManager)
+        r.drawPlayingSplitScreen(screen, mazeObj, playerObj, npcManager, turnManager, actionManager, flavorManager)
     case 2: // AnsweringTrivia
         r.drawTrivia(screen, triviaManager)
     case 3: // GameOver
@@ -118,30 +119,143 @@ func (r *Renderer) Draw(
     }
 }
 
-// Draw renders the entire game based on state
-// func (r *Renderer) Draw(
-// 	screen *ebiten.Image,
-// 	gameState int, // GameState
-// 	mazeObj *maze.Maze,
-// 	playerObj *player.Player,
-// 	npcManager *npc.Manager,
-// 	turnManager *turn.Manager,
-// 	triviaManager *trivia.Manager,
-// 	actionManager *action.Manager, // Added action manager
-// 	winner string,
-// ) {
-// 	// Draw background
-// 	screen.Fill(color.RGBA{40, 45, 55, 255})
-
-// 	switch gameState {
-// 	case 0: // Playing
-// 		r.drawPlaying(screen, mazeObj, playerObj, npcManager, turnManager, actionManager)
-// 	case 1: // AnsweringTrivia
-// 		r.drawTrivia(screen, triviaManager)
-// 	case 2: // GameOver
-// 		r.drawGameOver(screen, winner)
-// 	}
-// }
+// Add a new method for split-screen rendering
+func (r *Renderer) drawPlayingSplitScreen(
+    screen *ebiten.Image,
+    mazeObj *maze.Maze,
+    playerObj *player.Player,
+    npcManager *npc.Manager,
+    turnManager *turn.Manager,
+    actionManager *action.Manager,
+    flavorManager *flavor.Manager,
+) {
+    // Create a layout manager
+    layout := NewLayoutManager(ScreenWidth, ScreenHeight)
+    
+    // Get the maze section
+    mazeSection := layout.GetSection(MazeSection)
+    
+    // Draw maze section border
+    if mazeSection.Border {
+        // Draw section border
+        borderColor := color.RGBA{70, 70, 100, 255}
+        ebitenutil.DrawRect(
+            screen,
+            float64(mazeSection.Rect.X),
+            float64(mazeSection.Rect.Y),
+            float64(mazeSection.Rect.Width),
+            float64(mazeSection.Rect.Height),
+            borderColor,
+        )
+    }
+    
+    // Draw section title
+    if mazeSection.Title != "" {
+        DrawText(screen, mazeSection.Title, mazeSection.Rect.X + 10, mazeSection.Rect.Y + 20)
+    }
+    
+    // Draw the maze with proper offset to center it in the section
+    // Account for title height
+    mazeOffsetY := float64(mazeSection.Rect.Y) + 40 // Add space for title
+    
+    // Calculate maze width and height in pixels
+    mazeWidthPixels := float64(mazeObj.State.Width * int(maze.TileSize))
+    //mazeHeightPixels := float64(mazeObj.State.Height * int(maze.TileSize))
+    
+    // Center the maze in the section
+    mazeOffsetX := float64(mazeSection.Rect.X) + (float64(mazeSection.Rect.Width) - mazeWidthPixels) / 2
+    
+    // Draw the maze
+    DrawMaze(screen, mazeObj, mazeOffsetX, mazeOffsetY)
+    
+    // Draw NPCs
+    for _, npc := range npcManager.NPCs {
+        ebitenutil.DrawRect(
+            screen, 
+            mazeOffsetX + npc.X + 1, 
+            mazeOffsetY + npc.Y + 1, 
+            npc.Size, 
+            npc.Size, 
+            npc.Color,
+        )
+    }
+    
+    // Draw player
+    playerX, playerY := playerObj.GetPosition()
+    ebitenutil.DrawRect(
+        screen, 
+        mazeOffsetX + playerX + 1, 
+        mazeOffsetY + playerY + 1, 
+        playerObj.Size, 
+        playerObj.Size, 
+        color.RGBA{0, 0, 255, 255},
+    )
+    
+    // Get the flavor section
+    flavorSection := layout.GetSection(FlavorSection)
+    
+    // Draw flavor section border
+    if flavorSection.Border {
+        // Draw section border
+        borderColor := color.RGBA{70, 70, 100, 255}
+        ebitenutil.DrawRect(
+            screen,
+            float64(flavorSection.Rect.X),
+            float64(flavorSection.Rect.Y),
+            float64(flavorSection.Rect.Width),
+            float64(flavorSection.Rect.Height),
+            borderColor,
+        )
+    }
+    
+    // Draw section title
+    if flavorSection.Title != "" {
+        DrawText(screen, flavorSection.Title, flavorSection.Rect.X + 10, flavorSection.Rect.Y + 20)
+    }
+    
+    // Draw flavor image if available
+    if flavorManager != nil && flavorManager.CurrentImage != nil {
+        // Draw the flavor image in its section
+        flavorManager.Draw(
+            screen,
+            flavorSection.Rect.X,
+            flavorSection.Rect.Y + 40, // Add space for title
+            flavorSection.Rect.Width,
+            flavorSection.Rect.Height - 40,
+        )
+    } else {
+        // Draw a placeholder message
+        DrawText(
+            screen,
+            "No flavor image available",
+            flavorSection.Rect.X + 50,
+            flavorSection.Rect.Y + 100,
+        )
+    }
+    
+    // Draw UI info in the maze section
+    // Display near the top of the maze section
+    DrawText(screen, turnManager.OwnerText(), mazeSection.Rect.X + 10, mazeSection.Rect.Y + 60)
+    DrawText(screen, turnManager.StateText(), mazeSection.Rect.X + 10, mazeSection.Rect.Y + 80)
+    
+    // Draw action selection popup if in SelectingAction state
+    if turnManager.CurrentState == turn.SelectingAction {
+        r.drawActionPopup(screen, actionManager)
+    }
+    
+    // Draw action message if active - overlay at the bottom of the screen
+    if r.actionMsg != "" {
+        // Calculate message width for centering
+        msgWidth := len(r.actionMsg) * 14 // Approximate width based on character count
+        
+        // Draw a background rectangle for the message
+        msgBgX := ScreenWidth/2 - msgWidth/2 - 10
+        msgBgWidth := msgWidth + 20
+        
+        ebitenutil.DrawRect(screen, float64(msgBgX), ScreenHeight-60, float64(msgBgWidth), 30, color.RGBA{0, 0, 0, 180})
+        DrawText(screen, r.actionMsg, ScreenWidth/2-msgWidth/2, ScreenHeight-50)
+    }
+}
 
 // Draw the game over screen
 func (r *Renderer) drawGameOver(screen *ebiten.Image, winner string) {
