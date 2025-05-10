@@ -1,13 +1,17 @@
-// internal/game/maze/maze.go - updated maze generation
+// internal/game/maze/maze.go - updated maze generation with animation support
 
 package maze
 
 import (
 	"math/rand"
+	//"time"
+
+	"image/color"
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
-	"image/color"
+
+	"github.com/JacobCromwell/Mazenasium/internal/game/animation"
 )
 
 // Constants used by maze package
@@ -43,6 +47,11 @@ type Maze struct {
 	centerX       int
 	centerY       int
 	goalX, goalY  int // Track goal position
+	
+	// Animation related fields
+	animMgr               *animation.Manager
+	xRotateJumpAnimation  *animation.TileJumpAnimation
+	animatingTiles        []AnimatingTile
 }
 
 // Enhanced MazeTile struct with rotation properties
@@ -57,6 +66,15 @@ type MazeTile struct {
 // Position represents a position in the grid
 type Position struct {
 	X, Y int
+}
+
+// AnimatingTile represents a tile that is currently animating
+type AnimatingTile struct {
+	tileType    TileType
+	currentX    float64
+	currentY    float64
+	size        float64
+	scaleFactor float64 // For size animation
 }
 
 func New(width, height int, centerX int, centerY int) *Maze {
@@ -76,7 +94,7 @@ func New(width, height int, centerX int, centerY int) *Maze {
 		}
 	}
 
-	return &Maze{
+	maze := &Maze{
 		width:         width,
 		height:        height,
 		centerX:       centerX,
@@ -84,7 +102,19 @@ func New(width, height int, centerX int, centerY int) *Maze {
 		goalX:         goalX,
 		goalY:         goalY,
 		grid:          createMazeGrid(width, height, goalX, goalY),
+		animMgr:       animation.NewManager(),
+		animatingTiles: make([]AnimatingTile, 0),
 	}
+	
+	// Create and register the xRotate jump animation
+	maze.xRotateJumpAnimation = animation.NewTileJumpAnimation(2.0, func() {
+		// This callback executes when animation completes
+		maze.animatingTiles = make([]AnimatingTile, 0) // Clear animating tiles
+	})
+	
+	maze.animMgr.Register("xRotateJump", maze.xRotateJumpAnimation)
+	
+	return maze
 }
 
 // Helper function for absolute value
@@ -296,6 +326,42 @@ func hasPath(grid [][]MazeTile, startX, startY, goalX, goalY, width, height int)
 	return false
 }
 
+// IsAnimating checks if animations are currently running
+func (m *Maze) IsAnimating() bool {
+	return m.animMgr.IsAnimating()
+}
+
+func (m *Maze) Update() {
+    // Update all animations - this variable should be checked differently
+    stillAnimating := m.animMgr.Update() 
+    
+    // If animations are active, update animating tiles
+    if stillAnimating && m.xRotateJumpAnimation.IsActive() {
+		// In maze.go - add debug info to Draw method
+        tilePositions := m.xRotateJumpAnimation.GetTilePositions()
+        m.updateAnimatingTiles(tilePositions)
+    }
+}
+
+// Helper to update animating tiles based on animation
+func (m *Maze) updateAnimatingTiles(tilePositions []animation.TileAnimData) {
+	for i := range m.animatingTiles {
+		if i < len(tilePositions) {
+			m.animatingTiles[i].currentX = tilePositions[i].CurrentX
+			m.animatingTiles[i].currentY = tilePositions[i].CurrentY
+			
+			// Calculate scale factor based on jump height
+			// Tiles get slightly bigger at the peak of the jump
+			jumpProgress := (tilePositions[i].StartY - tilePositions[i].CurrentY) / tilePositions[i].JumpHeight
+			if jumpProgress > 0 {
+				m.animatingTiles[i].scaleFactor = 1.0 + (jumpProgress * 0.4) // Max 40% larger
+			} else {
+				m.animatingTiles[i].scaleFactor = 1.0
+			}
+		}
+	}
+}
+
 // HighlightXRotation highlights tiles that would be affected by X-rotation
 func (m *Maze) HighlightXRotation(playerX, playerY int) {
 	// Clear any existing highlights first
@@ -377,44 +443,93 @@ func (m *Maze) CheckXRotateCollisions(playerX, playerY, direction int, entityPos
 	return false // No collisions
 }
 
-// PerformXRotate performs the actual rotation of tiles on the X-axis
+// PerformXRotate performs the actual rotation of tiles on the X-axis with animation
 func (m *Maze) PerformXRotate(playerX, playerY, direction int) {
 	// Create a copy of the current row for rotation
 	tempRow := make([]MazeTile, m.width)
 	for x := 0; x < m.width; x++ {
 		tempRow[x] = m.grid[playerY][x]
 	}
-
+	
+	// Prepare animation data
+	startPositions := make([][2]int, 0)
+	endPositions := make([][2]int, 0)
+	
+	// Prepare animating tiles list
+	m.animatingTiles = make([]AnimatingTile, 0)
+	
 	// Perform the rotation for each tile (except boundary walls)
 	for x := 1; x < m.width-1; x++ {
 		// Skip the player's position
 		if x == playerX {
 			continue
 		}
-
+		
 		// Calculate new position
 		newX := x + direction
-
+		
 		// Handle wrapping within the playable area (excluding boundary walls)
 		if newX <= 0 {
 			newX = m.width - 2
 		} else if newX >= m.width-1 {
 			newX = 1
 		}
-
-		// Move the tile
+		
+		// Add this tile to animation data
+		startPositions = append(startPositions, [2]int{x, playerY})
+		endPositions = append(endPositions, [2]int{newX, playerY})
+		
+		// Add to animating tiles
+		m.animatingTiles = append(m.animatingTiles, AnimatingTile{
+			tileType: tempRow[x].tileType,
+			currentX: float64(x) * TileSize,
+			currentY: float64(playerY) * TileSize,
+			size: TileSize,
+			scaleFactor: 1.0,
+		})
+		
+		// Move the tile in the grid data (will be visible after animation)
 		m.grid[playerY][newX] = tempRow[x]
 	}
-
+	
+	// Start the animation
+	m.xRotateJumpAnimation.SetTiles(startPositions, endPositions, float64(TileSize))
+	m.animMgr.Start("xRotateJump")
+	
 	// Clear highlights after rotation
 	m.ClearHighlights()
 }
 
-// Update the Draw method to show highlights as outlines
+// Helper to check if a tile is currently animating
+func (m *Maze) isAnimatingTile(x, y int) bool {
+	// Only check the row being animated if animation is active
+	if !m.xRotateJumpAnimation.IsActive() {
+		return false
+	}
+	
+	// Get player grid position - we only animate the player's row
+	for _, tile := range m.animatingTiles {
+		tileGridX := int(tile.currentX / TileSize)
+		tileGridY := int(tile.currentY / TileSize)
+		
+		if tileGridX == x && tileGridY == y {
+			return true
+		}
+	}
+	
+	return false
+}
+
+// Update the Draw method to show animated tiles
 func (m *Maze) Draw(screen *ebiten.Image) {
 	// Draw grid lines and tiles
 	for y := 0; y < m.height; y++ {
 		for x := 0; x < m.width; x++ {
+			// Skip drawing tiles that are currently animating
+			if m.isAnimatingTile(x, y) {
+				continue
+			}
+			
 			// Calculate tile position
 			tileX := float64(x) * TileSize
 			tileY := float64(y) * TileSize
@@ -455,6 +570,48 @@ func (m *Maze) Draw(screen *ebiten.Image) {
 			ebitenutil.DrawLine(screen, tileX+TileSize, tileY, tileX+TileSize, tileY+TileSize, borderColor)
 			ebitenutil.DrawLine(screen, tileX, tileY+TileSize, tileX+TileSize, tileY+TileSize, borderColor)
 		}
+	}
+	
+	// Draw animating tiles on top
+	for _, tile := range m.animatingTiles {
+		// Calculate size with scale factor
+		scaledSize := tile.size * tile.scaleFactor
+		offsetX := (scaledSize - tile.size) / 2 // Center the scaled tile
+		offsetY := (scaledSize - tile.size) / 2
+		
+		// Determine tile color based on type
+		var tileColor color.RGBA
+		switch tile.tileType {
+		case Wall:
+			tileColor = color.RGBA{70, 70, 70, 255}
+		case Goal:
+			tileColor = color.RGBA{200, 0, 200, 255} // Purple goal
+		default: // Floor
+			tileColor = color.RGBA{200, 200, 200, 100}
+		}
+		
+		// Draw the animated tile
+		ebitenutil.DrawRect(
+			screen, 
+			tile.currentX - offsetX, 
+			tile.currentY - offsetY, 
+			scaledSize, 
+			scaledSize, 
+			tileColor,
+		)
+		
+		// Draw border
+		borderColor := color.RGBA{100, 100, 100, 255}
+		
+		// Draw border lines accounting for scaling
+		ebitenutil.DrawLine(screen, tile.currentX - offsetX, tile.currentY - offsetY, 
+			tile.currentX - offsetX + scaledSize, tile.currentY - offsetY, borderColor)
+		ebitenutil.DrawLine(screen, tile.currentX - offsetX, tile.currentY - offsetY, 
+			tile.currentX - offsetX, tile.currentY - offsetY + scaledSize, borderColor)
+		ebitenutil.DrawLine(screen, tile.currentX - offsetX + scaledSize, tile.currentY - offsetY, 
+			tile.currentX - offsetX + scaledSize, tile.currentY - offsetY + scaledSize, borderColor)
+		ebitenutil.DrawLine(screen, tile.currentX - offsetX, tile.currentY - offsetY + scaledSize, 
+			tile.currentX - offsetX + scaledSize, tile.currentY - offsetY + scaledSize, borderColor)
 	}
 }
 

@@ -97,6 +97,12 @@ func (m *Manager) Update() {
 
 // Update while playing
 func (m *Manager) updatePlaying() {
+
+	if m.Maze.IsAnimating() {
+		// Update maze animations
+		m.Maze.Update()
+		return
+	}
 	// Update positions for smooth movement
 	m.updatePositions()
 
@@ -208,7 +214,7 @@ func (m *Manager) handleXRotateConfirmation() {
 			return
 		}
 
-		// No collision, perform the rotation
+		// No collision, perform the rotation with animation
 		m.Maze.PerformXRotate(playerGridX, playerGridY, m.xRotateDirection)
 
 		// Mark the action as used
